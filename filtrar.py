@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
+from shapely.geometry.collection import GeometryCollection
 from shapely import intersects
 #from shapely import union
 #import itertools
@@ -31,6 +32,14 @@ def lpolys(PMP):
         return list(PMP.geoms)
 
 #%%
+def GC2MP(P):
+    if type(P) == GeometryCollection:
+       return MultiPolygon([p for p in list(P.geoms) if type(p)==Polygon])
+    else:
+        return P
+
+    
+#%%
 def topo(P):
     #devuelve una descripcion de la topología del polígono o del multip
     #es recursiva para multipolígonos
@@ -39,6 +48,12 @@ def topo(P):
         return [len(P.interiors)]
       elif type(P)==MultiPolygon:
         return [topoP(Q) for Q in list(P.geoms)]
+      elif type(P) == GeometryCollection:
+        return [p for p in list(P.geoms) if type(p)==Polygon]
+      else:
+        print("Tipo no reconocido")
+        
+      
     else:
         return []
 
@@ -81,14 +96,15 @@ def calcular_saltos_filtracion(P,r_min = 0, r_max=1000, r_step=1):
     D = []# radios guardados
     T=[]  # topologías
     Qo=P
-    for d in tqdm(range(r_min, r_max, r_step)):
-        Q=(Qo.buffer(-d).buffer(d)).normalize()
+    for d in tqdm(np.arange(r_min, r_max, r_step)):
+        Q=(Qo.intersection(Qo.buffer(-d).buffer(d))).normalize()
         t = topo(Q)
         if t!=ta:
             D.append(d)
             T.append(t)
             ta=t
             Qo=Q
+            shapely.plotting.plot_polygon(Q)
             #print(d,t,len(t))
     
     if t!=[]: #si no llegúe al conjunto vación, agrego un radio grande.
@@ -110,9 +126,13 @@ def calcular_filtracion(P, D):
     Qo=P #inicializo el polígono anterior, es el primero
     for d in tqdm(D):
         #print(d)
-        Q=Qo.buffer(-d).buffer(d).normalize()
-        dif=(Qo-Q).normalize() #diferencias entre etapas (radios)
-        Qo=Q
+        #Q=Qo.buffer(-d).buffer(d)#.normalize()
+        #dif=(Qo-Q).normalize() #diferencias entre etapas (radios)
+        #Qo=Qo.intersection(Q).normalize()
+        Q=Qo.buffer(-d).buffer(d)#.normalize()
+        dif=GC2MP(Qo-Q).normalize() #diferencias entre etapas (radios)
+        Qo=GC2MP(Qo.intersection(Q)).normalize()
+        
         if d>0:
             L=lpolys(dif) #separo la diferencia en polígonos simples 
             F+=L          #los agrego a la filtración 
@@ -152,6 +172,7 @@ def compute_intersections(F):
             if j>i:
                 q = F[j]
                 if intersects(pi, q):
+                    print(f"Encontré una iuntersección al inflar {i=}, {j=}")
                     Int[i].append(j)
         i+=1
     return Int
@@ -193,13 +214,15 @@ def calcular_relaciones(F,K,Int):
 ###############################################################################
 #%%
     
-wdir = '/home/rgrimson/Downloads/estructura/salado/'
+wdir = '/home/rgrimson/Projects/2024 - Filtracion/'
 fn = wdir + 'poly1_utm21s'#'saladito_muy_corto'
 
 gdf = gpd.read_file(fn + '.shp')
 #miro solo el primer polígono
 P=gdf.iloc[0].geometry #union(gdf.iloc[0]['geometry']...)
 
+coords = ((0., 0.), (0., 3.), (3., 3.), (3., 2.), (10.,2.), (10.,4), (15.,4.),(15.,-1.),(10.,-1.), (10.,1.),  (3., 1.), (3., 0.), (0., 0.))
+P=Polygon(coords)
 #%% calcular y mostrar puntos para la filtración
 print("calcular saltos para filtracion")
 D,T = calcular_saltos_filtracion(P)
@@ -258,7 +281,7 @@ if guardar_intermedios:
 
 print('defino clases a partir de los umbrales')
 umbrales = [230,600]
-en más tráfico que los ca
+
 PU=[]
 ClasePatriarcas = {}
 uo = 0 #umbral anterior, comienza en 0
