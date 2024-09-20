@@ -16,8 +16,17 @@ from tqdm import tqdm
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
-from shapely import intersects
+#from shapely import intersects
 #from shapely import union
+
+# Importar condicionalmente unary_union desde shapely (v >= 2.0.0) o desde
+#  shapely.ops (v < 2.0.0).
+from packaging import version
+import shapely
+if version.parse(shapely.__version__) >= version.parse("2.0.0"):
+    from shapely import unary_union  # pylint: disable=no-name-in-module
+else:
+    from shapely.ops import unary_union  # pylint: disable=no-name-in-module
 #import itertools
 
 
@@ -44,7 +53,7 @@ def GC2MP(P):
     else:
         return P
 
-    
+
 #%%
 def topo(P):
     #devuelve una descripcion de la topología del polígono o del multip
@@ -58,8 +67,8 @@ def topo(P):
         return [p for p in list(P.geoms) if type(p)==Polygon]
       else:
         print("Tipo no reconocido")
-        
-      
+
+
     else:
         return []
 
@@ -73,7 +82,7 @@ def topoP(P):
 #%% para sacar errores de tanto partir y unir
 def clean_interiors_P(P,eps=0.0001):
         list_interiors = []
-        
+
         for interior in P.interiors:
             p = Polygon(interior)
 
@@ -81,7 +90,7 @@ def clean_interiors_P(P,eps=0.0001):
                 list_interiors.append(interior)
 
         return Polygon(P.exterior.coords, holes=list_interiors)
-        
+
 def clean_interiors_MP(P,eps=0.0001):
     list_parts = []
 
@@ -94,8 +103,8 @@ def clean_interiors(PMP,eps=0.0001):
         return clean_interiors_P(PMP,eps)
     elif type(PMP)==MultiPolygon:
         return clean_interiors_MP(PMP,eps)
-    
-    
+
+
 #%% calcular filtración de manera recursiva
 def calcular_filtracion_recursiva(P,r,cod,r_step=1):
     if type(P)!=Polygon:
@@ -107,7 +116,7 @@ def calcular_filtracion_recursiva(P,r,cod,r_step=1):
         return Polygon()
     print(cod,r,ta)
 
-    d = r + r_step    
+    d = r + r_step
     Q=(P.intersection(P.buffer(-d).buffer(d))).normalize()
     t = topo(Q)
     while len(t)==len(ta): #busco el primer cambio en la topología
@@ -130,7 +139,7 @@ def calcular_filtracion_recursiva(P,r,cod,r_step=1):
         return calcular_filtracion_recursiva(LQ[0],d,cod,r_step)
     else:
         return Polygon()
-        
+
 #%%
 def calcular_filtracion(P):
     return (P,calcular_filtracion_recursiva(P,0,'',r_step=1))
@@ -157,7 +166,6 @@ def dicc_patriarcas(FP,cod=''):
     return d
 
 #%%
-import shapely
 
 
 def agrupar_filtracion(F):
@@ -171,13 +179,13 @@ def agrupar_filtracion(F):
         LPC = []
         for LP in DescPG:
             LPC.extend(LP)
-        D = PG-shapely.union_all(LPC) #componentes del grande que no estan en el chico
+        D = PG-unary_union(LPC) #componentes del grande que no estan en el chico
         LD = lpolys(D) #como lista
         for i,p in enumerate(LD): #las miro una a una
             J=[]
             print(i,end=': ')
             for j,q in enumerate(LPC): #me fijo que PChicos tocas
-                if intersects(p, q):
+                if p.intersects(q):
                     #print(i,j)
                     J.append(j)
             if len(J)>1:
@@ -189,17 +197,17 @@ def agrupar_filtracion(F):
             else:
                 print("PROBLEMA")
         return LPC
-                    
-#%%                    
 
-            
+#%%
+
+
 #%%
 ###############################################################################
 ###############################################################################
 ###############################################################################
 ###############################################################################
 #%%
-    
+
 wdir = '/home/rgrimson/Projects/2024 - Filtracion/salado/'
 fn = wdir + 'laguito'#'saladito_muy_corto'
 
@@ -221,21 +229,21 @@ FP = calcular_filtracion(P)
 D=dicc_filtracion(FP,cod='')
 gdfo = gpd.geodataframe.GeoDataFrame(D.items(),columns=['cod','geometry'])
 gdfo=gdfo.set_crs(gdf.crs)
-gdfo.to_file(wdir + '_filt.shp')    
+gdfo.to_file(wdir + '_filt.shp')
 #%%
 # guardar patriarcas
 
 DP=dicc_patriarcas(FP,cod='')
 gdfo = gpd.geodataframe.GeoDataFrame(DP.items(),columns=['cod','geometry'])
 gdfo=gdfo.set_crs(gdf.crs)
-gdfo.to_file(fn + '_leaves.shp')    
+gdfo.to_file(fn + '_leaves.shp')
 
 #%%
 
 FA=agrupar_filtracion(FP)
 gdfo = gpd.geodataframe.GeoDataFrame(FA,columns=['geometry'])
 gdfo=gdfo.set_crs(gdf.crs)
-gdfo.to_file(wdir + 'agrupada.shp')    
+gdfo.to_file(wdir + 'agrupada.shp')
 
 #%%
 ###############################################################################
