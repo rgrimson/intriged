@@ -7,10 +7,11 @@ Created on Fri Aug 16 10:36:32 2024
 @author: rgrimson
 """
 
-from packaging import version
 from pathlib import Path
 import pprint
 
+
+from packaging import version
 #import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -418,7 +419,7 @@ def agrupar_filtracion(F, verb=0):
             LPC.extend(LP)
 
         # Diferencia entre el polígono divisible y todos sus componentes núcleo.
-        D = PG-unary_union(LPC)  # Componentes del grande que no estan en el chico
+        D = PG - unary_union(LPC)  # Componentes del grande que no estan en el chico
         LD = lpolys(D)  # Como lista
 
         # Iterar sobre los polígonos de la diferencia.
