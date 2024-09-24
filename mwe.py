@@ -99,9 +99,12 @@ def simplificar(R):
     i=1
     coords = list(R.exterior.coords)
     l = len(coords)
-    while i<len(coords)-1:
+    B=R.buffer(-437, resolution=5, cap_style=1, join_style=1, mitre_limit=2.0, single_sided=False)
+    topoOrig=topo(B)
+
+    while i<l-1:
         new_R=sacar_i(R,i)
-        B=new_R.buffer(-437)
+        B=new_R.buffer(-437, resolution=5, cap_style=1, join_style=1, mitre_limit=2.0, single_sided=False)
         if topo(B)==topoOrig:
             R=new_R
             print('s',end='')
@@ -110,6 +113,7 @@ def simplificar(R):
         else:
             print('x',end='')
             i+=1
+    return new_R
 
 
 ##%
@@ -128,7 +132,7 @@ def main():
 
     R = gdf2.iloc[0].geometry # union(gdf.iloc[0]['geometry']...)
     print(f'{R = }')
-    R = shapely.set_precision(R, 1/1024)
+    #R = shapely.set_precision(R, 1/1024)
 
     #plot_polygon(R) #print(f'{topo(R) = }')
     B=R.buffer(-437)

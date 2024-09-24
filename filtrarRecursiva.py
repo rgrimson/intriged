@@ -162,7 +162,7 @@ def shapefile_from_geom(geoms):
 
 #%%
 # Calcular Filtración Recursiva
-def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0):
+def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0, eps=0.001):
     """Calcular la filtración recursiva de P.
 
     Returns:
@@ -196,7 +196,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0):
     # Q es la intersección entre P y su buffereado
     #  (prácticamente el mismo buffereado, que debería estar contenido en P
     #  excepto porque tiene vértices que P no tiene).
-    Q = (P.intersection(P.buffer(-d).buffer(d))).normalize()
+    Q = (P.intersection(P.buffer(-d).buffer(d+eps))).normalize()
     #print(f'{shapely.get_precision(Q) = }')
 
     t = topo(Q)
@@ -204,7 +204,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0):
     # Mientras que P y Q tengan misma cantidad de partes:
     while len(t)==len(ta):
         d += r_step
-        buffered = P.buffer(-d).buffer(d)
+        buffered = P.buffer(-d).buffer(d+eps)
         if not buffered.is_valid:
             print
             invalidas = [P, buffered]
@@ -262,7 +262,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0):
         if verb > 1:
             print(f'{LQ[0] = }')
         # Filtrar esa parte en forma recursiva
-        return calcular_filtracion_recursiva(LQ[0], d, cod, r_step, verb)
+        return calcular_filtracion_recursiva(LQ[0], d, cod, r_step, verb,eps=eps)
 
     # Si no, LQ == [Polygon()] y sale de la recursión devolviendo Polygon().
     else:
@@ -271,7 +271,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0):
 
 #%%
 # Calcular Filtración de Polygon
-def calcular_filtracion(P, r=0, r_step=1, verb=0, prec=0.125):
+def calcular_filtracion(P, r=0, r_step=1, verb=0, prec=0.125, eps = 0.001):
     """Calcular la filtración de un polígono singlepart.
 
     Returns:
@@ -280,9 +280,9 @@ def calcular_filtracion(P, r=0, r_step=1, verb=0, prec=0.125):
         completamente sin descomponerse, o una lista conteniendo la
         descomposición de P).
     """
-    # Definir la precisión de P y calcular su filtración
-    P_limpio = (shapely.set_precision(P, prec)).normalize()
-    F = calcular_filtracion_recursiva(P_limpio, r, '', r_step, verb, prec)
+    # Definir la precisión de P y cnt("PROBLEMA")alcular su filtración
+    P_limpio = P.buffer(0)
+    F = calcular_filtracion_recursiva(P_limpio, r, '', r_step, verb, prec, eps=eps)
 
     # Si calcular_filtracion_recursiva devuelve Polygon(), entonces P es
     #  indivisible para los parámetros de r, r_step.
@@ -318,7 +318,6 @@ def antirecursion(F, cod):
         if type(F) == Polygon:
             base.append(f'{topo(F)}')
 
-        print("; ".join(base) + ".")
 
         if type(F) == Polygon:
             poligonos.append(F)
