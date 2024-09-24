@@ -1,6 +1,6 @@
 geopandas
 matplotlib
 numpy
-shapely
+shapely >= 2.0.0
 rtree
 packaging
