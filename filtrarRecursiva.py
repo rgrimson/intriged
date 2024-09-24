@@ -38,7 +38,6 @@ else:
 
 # guardar_intermedios = True
 
-
 #%%
 # Listar Polígonos
 def lpolys(PMP):
@@ -153,8 +152,17 @@ def plot_polygon(polygon):
 
 
 #%%
+# Crear shapefile a partir de geometría
+def shapefile_from_geom(geoms):
+    """Guardar el shapefile de un polígono."""
+
+    gdfo = gpd.geodataframe.GeoDataFrame(geoms, columns=['geometry'])
+    gdfo = gdfo.set_crs(gdf.crs)
+    gdfo.to_file(str(fn) + '_invalid.shp')
+
+#%%
 # Calcular Filtración Recursiva
-def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
+def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0):
     """Calcular la filtración recursiva de P.
 
     Returns:
@@ -188,14 +196,22 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
     # Q es la intersección entre P y su buffereado
     #  (prácticamente el mismo buffereado, que debería estar contenido en P
     #  excepto porque tiene vértices que P no tiene).
-    Q = ((P.intersection(P.buffer(-d).buffer(d))).buffer(0)).normalize()
+    Q = (P.intersection(P.buffer(-d).buffer(d))).normalize()
+    #print(f'{shapely.get_precision(Q) = }')
 
     t = topo(Q)
 
     # Mientras que P y Q tengan misma cantidad de partes:
     while len(t)==len(ta):
         d += r_step
-        Q = ((P.intersection(P.buffer(-d).buffer(d))).buffer(0)).normalize()
+        buffered = P.buffer(-d).buffer(d)
+        if not buffered.is_valid:
+            print
+            invalidas = [P, buffered]
+            shapefile_from_geom(invalidas)
+
+
+        Q = (P.intersection(buffered)).normalize()
         t = topo(Q)
 
     # En este momento, Q tiene más partes que P, o es un polígono vacío (si P
@@ -219,7 +235,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
             # La filtración recursiva no analiza la descomposición en d sino en
             #  d + r_step (Q es una componente del buffereado de P en d, por lo
             #  que bufferear a Q en d no debería alterarlo).
-            frQ = calcular_filtracion_recursiva(Q, d, cod+str(i), r_step, verb)
+            frQ = calcular_filtracion_recursiva(Q, d, cod+str(i), r_step, verb, prec)
 
             # La filtración recursiva puede devolver un polígono vacío o
             #  una lista `rta`.
@@ -255,7 +271,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
 
 #%%
 # Calcular Filtración de Polygon
-def calcular_filtracion(P, r=0, r_step=1, verb=0):
+def calcular_filtracion(P, r=0, r_step=1, verb=0, prec=0.125):
     """Calcular la filtración de un polígono singlepart.
 
     Returns:
@@ -264,9 +280,9 @@ def calcular_filtracion(P, r=0, r_step=1, verb=0):
         completamente sin descomponerse, o una lista conteniendo la
         descomposición de P).
     """
-    # Limpiar la topología de P y calcular su filtración
-    P_limpio = (P.buffer(0)).normalize()
-    F = calcular_filtracion_recursiva(P_limpio, r, '', r_step, verb)
+    # Definir la precisión de P y calcular su filtración
+    P_limpio = (shapely.set_precision(P, prec)).normalize()
+    F = calcular_filtracion_recursiva(P_limpio, r, '', r_step, verb, prec)
 
     # Si calcular_filtracion_recursiva devuelve Polygon(), entonces P es
     #  indivisible para los parámetros de r, r_step.
@@ -507,7 +523,7 @@ def agrupar_filtracion(F, verb=0):
 
 home_dir = Path.home()
 wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-fn = wdir / 'laguito' # 'saladito_muy_corto'
+fn = wdir / 'falladito' # 'laguito' # 'saladito_muy_corto'
 
 gdf = gpd.read_file(str(fn) + '.shp')
 
@@ -522,7 +538,7 @@ S = Polygon(coords)
 #gdf = gpd.geodataframe.GeoDataFrame(pd.DataFrame(D.items(),columns=['cod','geometry']))
 
 P = R
-FP = calcular_filtracion(P)
+FP = calcular_filtracion(P, prec=1/1024)
 
 #%%
 

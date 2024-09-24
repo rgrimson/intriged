@@ -1,2 +1,5 @@
 # Ignorar el directorio del proyecto spyder
 .spyproject/
+
+# Ignorar el directorio del proyecto vscode
+.vscode/
