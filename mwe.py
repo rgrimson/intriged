@@ -118,7 +118,7 @@ def simplificar(R):
 
 # %% Analizar segmentos
 def analizar_segmentos(simplificado, min_seg, max_seg):
-    """Calcular la cantidad de segmentos que hace que el mwe no falle."""
+    """Analizar la topología del buffer-in para un rango de segmentos."""
     results = {}
     for resolution in range(min_seg, max_seg):
         buffered = simplificado.buffer(-437, resolution=resolution)
@@ -126,6 +126,7 @@ def analizar_segmentos(simplificado, min_seg, max_seg):
         results[resolution] = topo_buffered
 
     return results
+
 
 # %% Main
 def main():
@@ -152,14 +153,15 @@ def main():
 
     print(f'{topoOrig = }')
 
+    # Simplificar la geometría (reducir vértices) manteniendo MWE.
     r_simpl = simplificar(R)
 
-    print(f'{r_simpl = }')
-
+    # Crear un shapefile con la geometría simplificada
     shapefile_from_geom([r_simpl], gdf2.crs, fn)
 
     # Análisis de segmentos del buffer
     analisis_seg = analizar_segmentos(r_simpl, 5, 20)
+    print('analisis_seg =')
     pprint(analisis_seg)
 
 
