@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Aug 16 10:36:32 2024
-
-@author: rgrimson
-"""
+"""Aplicar descomposición de partes a partir de detección de cuellos."""
 
 import os
 
@@ -28,13 +24,14 @@ guardar_intermedios = True
 
 #%%
 def lpolys(PMP):
+    """Generar una lista de polígonos singlepart."""
     #devuelve una lista con los polígonos simples que componen el P o MP.
     if type(PMP)==Polygon:
         return [PMP]
     elif type(PMP)==MultiPolygon:
         return list(PMP.geoms)
     elif type(PMP) == GeometryCollection:
-      return [p for p in list(PMP.geoms) if type(p)==Polygon]
+        return [p for p in list(PMP.geoms) if type(p)==Polygon]
     else:
         a = 0
         b = a/a
@@ -42,25 +39,27 @@ def lpolys(PMP):
 
 #%%
 def GC2MP(P):
+    """Generar un MultiPolyogn a partir de una GeometryCollection."""
     if type(P) == GeometryCollection:
-       return MultiPolygon([p for p in list(P.geoms) if type(p)==Polygon])
+        return MultiPolygon([p for p in list(P.geoms) if type(p)==Polygon])
     else:
         return P
 
 
 #%%
 def topo(P):
+    """Generar la topología de un polígono o multipolígono."""
     #devuelve una descripcion de la topología del polígono o del multip
     #es recursiva para multipolígonos
     if P:
-      if type(P)==Polygon:
-        return [len(P.interiors)]
-      elif type(P)==MultiPolygon:
-        return [topoP(Q) for Q in list(P.geoms)]
-      elif type(P) == GeometryCollection:
-        return [p for p in list(P.geoms) if type(p)==Polygon]
-      else:
-        print("Tipo no reconocido")
+        if type(P)==Polygon:
+            return [len(P.interiors)]
+        elif type(P)==MultiPolygon:
+            return [topoP(Q) for Q in list(P.geoms)]
+        elif type(P) == GeometryCollection:
+            return [p for p in list(P.geoms) if type(p)==Polygon]
+        else:
+            print("Tipo no reconocido")
 
 
     else:
@@ -68,6 +67,7 @@ def topo(P):
 
 #%%
 def topoP(P):
+    """Generar la topologia de un polígono."""
     if P and type(P)==Polygon:
         return len(P.interiors)
     else:

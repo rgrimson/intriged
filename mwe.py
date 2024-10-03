@@ -1,4 +1,6 @@
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Genera un minimal working example que falle el buffer in."""
 
 from pathlib import Path
 from pprint import pprint
@@ -76,7 +78,7 @@ def topoP(P):
 
 #%%
 # Crear shapefile a partir de geometría
-def shapefile_from_geom(geoms):
+def shapefile_from_geom(geoms, gdf, fn):
     """Guardar el shapefile de un polígono."""
 
     gdfo = gpd.geodataframe.GeoDataFrame(geoms, columns=['geometry'])

@@ -206,7 +206,6 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0, eps=0.001
         d += r_step
         buffered = P.buffer(-d).buffer(d+eps)
         if not buffered.is_valid:
-            print
             invalidas = [P, buffered]
             shapefile_from_geom(invalidas)
 
