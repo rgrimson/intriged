@@ -1,31 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Genera un minimal working example que falle el buffer in."""
+"""Genera un minimal working example para el que falle el buffer in."""
 
+# %% Librerías
 from pathlib import Path
 from pprint import pprint
 
-
-from packaging import version
-#import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
-#import numpy as np
-#import seaborn as sns
-#from tqdm import tqdm
 
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
-#from shapely import wkt
-#from shapely import intersects
-#from shapely import union
 
 import shapely
 
 
-#%%
-# Imprimir Polígono
+# %% Imprimir Polígono
 def plot_polygon(polygon):
     """Imprimir un polígono o multipolígono."""
     # Función auxiliar para imprimir polígonos singlepart.
@@ -47,8 +38,7 @@ def plot_polygon(polygon):
     return None
 
 
-#%%
-# Topologia de Polygon, MultiPolygon o GeometryCollection
+# %% Topologia de Polygon, MultiPolygon o GeometryCollection
 def topo(P):
     """Generar la topología de un polígono o multipolígono."""
     # Devuelve una descripcion de la topología del polígono o del multip.
@@ -66,8 +56,7 @@ def topo(P):
         return []
 
 
-#%%
-# Topologia de Polygon
+# %% Topologia de Polygon
 def topoP(P):
     """Generar la topologia de un polígono."""
     if P and type(P)==Polygon:
@@ -76,17 +65,16 @@ def topoP(P):
         return []
 
 
-#%%
-# Crear shapefile a partir de geometría
-def shapefile_from_geom(geoms, gdf, fn):
-    """Guardar el shapefile de un polígono."""
+# %% Crear shapefile a partir de una lista de geometrías
+def shapefile_from_geom(geoms, crs, fn):
+    """Guardar el shapefile de una lista de geometrías."""
 
     gdfo = gpd.geodataframe.GeoDataFrame(geoms, columns=['geometry'])
-    gdfo = gdfo.set_crs(gdf.crs)
+    gdfo = gdfo.set_crs(crs)
     gdfo.to_file(str(fn) + '_invalid.shp')
 
 
-#%%
+# %% Sacar i-esimo vertice
 def sacar_i(R,i=1):
     """Sacar el i-esimo vertice de un polígono."""
     coords = list(R.exterior.coords)
@@ -95,7 +83,7 @@ def sacar_i(R,i=1):
     new_R = shapely.geometry.Polygon(new_coords)
     return new_R
 
-##%
+# %% Simplificar
 def simplificar(R):
     """Simplificar R hasta encontrar el mwe."""
     i=1
@@ -106,7 +94,15 @@ def simplificar(R):
 
     while i<l-1:
         new_R=sacar_i(R,i)
-        B=new_R.buffer(-437, resolution=5, cap_style=1, join_style=1, mitre_limit=2.0, single_sided=False)
+        B=new_R.buffer(
+            -437,
+            resolution=5,
+            cap_style=1,
+            join_style=1,
+            mitre_limit=2.0,
+            single_sided=False
+        )
+
         if topo(B)==topoOrig:
             R=new_R
             print('s',end='')
@@ -115,11 +111,23 @@ def simplificar(R):
         else:
             print('x',end='')
             i+=1
-    return new_R
+    print()
+
+    return R
 
 
-##%
+# %% Analizar segmentos
+def analizar_segmentos(simplificado, min_seg, max_seg):
+    """Calcular la cantidad de segmentos que hace que el mwe no falle."""
+    results = {}
+    for resolution in range(min_seg, max_seg):
+        buffered = simplificado.buffer(-437, resolution=resolution)
+        topo_buffered = topo(buffered)
+        results[resolution] = topo_buffered
 
+    return results
+
+# %% Main
 def main():
     """Leer un shapefile, simplificarlo y crear un nuevo shapefile."""
     #print(f'{shapely.__version__ = }')
@@ -137,13 +145,22 @@ def main():
     #R = shapely.set_precision(R, 1/1024)
 
     #plot_polygon(R) #print(f'{topo(R) = }')
-    B=R.buffer(-437)
+    B = R.buffer(-437)
     #plot_polygon(B)
     #print(f'{type(B) = }')
-    topoOrig=topo(B)
+    topoOrig = topo(B)
 
     print(f'{topoOrig = }')
 
+    r_simpl = simplificar(R)
+
+    print(f'{r_simpl = }')
+
+    shapefile_from_geom([r_simpl], gdf2.crs, fn)
+
+    # Análisis de segmentos del buffer
+    analisis_seg = analizar_segmentos(r_simpl, 5, 20)
+    pprint(analisis_seg)
 
 
 if __name__ == '__main__':
