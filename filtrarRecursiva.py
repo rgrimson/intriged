@@ -7,21 +7,22 @@ Created on Fri Aug 16 10:36:32 2024
 @author: rgrimson
 """
 
-from packaging import version
 from pathlib import Path
-import pprint
+from pprint import pprint
 
+
+from packaging import version
 #import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import numpy as np
+#import numpy as np
 #import seaborn as sns
-from tqdm import tqdm
+#from tqdm import tqdm
 
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
-from shapely import wkt
+#from shapely import wkt
 #from shapely import intersects
 #from shapely import union
 
@@ -35,8 +36,7 @@ else:
 #import itertools
 
 
-guardar_intermedios = True
-
+# guardar_intermedios = True
 
 #%%
 # Listar Polígonos
@@ -152,8 +152,17 @@ def plot_polygon(polygon):
 
 
 #%%
+# Crear shapefile a partir de geometría
+def shapefile_from_geom(geoms):
+    """Guardar el shapefile de un polígono."""
+
+    gdfo = gpd.geodataframe.GeoDataFrame(geoms, columns=['geometry'])
+    gdfo = gdfo.set_crs(gdf.crs)
+    gdfo.to_file(str(fn) + '_invalid.shp')
+
+#%%
 # Calcular Filtración Recursiva
-def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
+def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, prec=0, eps=0.001):
     """Calcular la filtración recursiva de P.
 
     Returns:
@@ -187,14 +196,22 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
     # Q es la intersección entre P y su buffereado
     #  (prácticamente el mismo buffereado, que debería estar contenido en P
     #  excepto porque tiene vértices que P no tiene).
-    Q = (P.intersection(P.buffer(-d).buffer(d))).normalize()
+    Q = (P.intersection(P.buffer(-d).buffer(d+eps))).normalize()
+    #print(f'{shapely.get_precision(Q) = }')
 
     t = topo(Q)
 
     # Mientras que P y Q tengan misma cantidad de partes:
     while len(t)==len(ta):
         d += r_step
-        Q = (P.intersection(P.buffer(-d).buffer(d))).normalize()
+        buffered = P.buffer(-d).buffer(d+eps)
+        if not buffered.is_valid:
+            print
+            invalidas = [P, buffered]
+            shapefile_from_geom(invalidas)
+
+
+        Q = (P.intersection(buffered)).normalize()
         t = topo(Q)
 
     # En este momento, Q tiene más partes que P, o es un polígono vacío (si P
@@ -218,7 +235,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
             # La filtración recursiva no analiza la descomposición en d sino en
             #  d + r_step (Q es una componente del buffereado de P en d, por lo
             #  que bufferear a Q en d no debería alterarlo).
-            frQ = calcular_filtracion_recursiva(Q, d, cod+str(i), r_step, verb)
+            frQ = calcular_filtracion_recursiva(Q, d, cod+str(i), r_step, verb, prec)
 
             # La filtración recursiva puede devolver un polígono vacío o
             #  una lista `rta`.
@@ -245,7 +262,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
         if verb > 1:
             print(f'{LQ[0] = }')
         # Filtrar esa parte en forma recursiva
-        return calcular_filtracion_recursiva(LQ[0], d, cod, r_step, verb)
+        return calcular_filtracion_recursiva(LQ[0], d, cod, r_step, verb,eps=eps)
 
     # Si no, LQ == [Polygon()] y sale de la recursión devolviendo Polygon().
     else:
@@ -254,7 +271,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0):
 
 #%%
 # Calcular Filtración de Polygon
-def calcular_filtracion(P, r=0, r_step=1, verb=0):
+def calcular_filtracion(P, r=0, r_step=1, verb=0, prec=0.125, eps = 0.001):
     """Calcular la filtración de un polígono singlepart.
 
     Returns:
@@ -263,7 +280,19 @@ def calcular_filtracion(P, r=0, r_step=1, verb=0):
         completamente sin descomponerse, o una lista conteniendo la
         descomposición de P).
     """
-    return (P, calcular_filtracion_recursiva(P, r, '', r_step, verb))
+    # Definir la precisión de P y cnt("PROBLEMA")alcular su filtración
+    P_limpio = P.buffer(0)
+    F = calcular_filtracion_recursiva(P_limpio, r, '', r_step, verb, prec, eps=eps)
+
+    # Si calcular_filtracion_recursiva devuelve Polygon(), entonces P es
+    #  indivisible para los parámetros de r, r_step.
+    # Devolver P:
+    if not F:
+        return P
+
+    # Si no, devolver el P limpio y su filtración.
+    else:
+        return (P_limpio, F)
 
 
 #%%
@@ -289,7 +318,6 @@ def antirecursion(F, cod):
         if type(F) == Polygon:
             base.append(f'{topo(F)}')
 
-        print("; ".join(base) + ".")
 
         if type(F) == Polygon:
             poligonos.append(F)
@@ -327,9 +355,6 @@ def dicc_filtracion(FP, cod=''):
         d = {cod:FP[0]}
         # El segundo elemento es una lista con su descomposición.
         # Iterarla y recurrir por cada elemento.
-        # Nota: Falla en caso de que un polígono original se absorba en el
-        #  en el primer r + r_step, porque su filtración devuelve una tupla de
-        #  el polígono original y un polígono vacío.
         for i, p in enumerate(FP[1]):
             d.update(dicc_filtracion(p,cod+str(i)))
 
@@ -358,9 +383,6 @@ def dicc_patriarcas(FP,cod=''):
         # Iniciar un diccionario vacío
         d = {}
         # Si la lista de descomposición tiene más de un elemento (siempre?):
-        # Nota: Falla en caso de que un polígono original se absorba en el
-        #  en el primer r + r_step, porque su filtración devuelve una tupla de
-        #  el polígono original y un polígono vacío.
         if len(FP[1])>1:
             # Iterarla y recurrir por cada elemento
             for i, p in enumerate(FP[1]):
@@ -394,7 +416,7 @@ def agrupar_filtracion(F, verb=0):
     #  su descomposición.
     else:
         # PG es tipo Polygon.
-        PG = F[0]  # Polígono grande
+        PG = F[0].buffer(0)  # Polígono grande
 
         # DescPG es tipo lista, iniciada con la lista de la descomposición de PG
         DescPG = F[1]  # Descomposición del PG
@@ -409,7 +431,7 @@ def agrupar_filtracion(F, verb=0):
         if verb > 1:
             print(f'{PG = }')
             print('DescPG:')
-            pprint.pprint(DescPG)
+            pprint(DescPG)
 
         # Lista de polígonos chicos.
         LPC = []
@@ -417,45 +439,78 @@ def agrupar_filtracion(F, verb=0):
             # Extender la lista LPC con todos los núcleos que componen a PG.
             LPC.extend(LP)
 
-        # Diferencia entre el polígono divisible y todos sus componentes núcleo.
-        D = PG-unary_union(LPC)  # Componentes del grande que no estan en el chico
-        LD = lpolys(D)  # Como lista
+        ## Diferencia entre el polígono divisible y todas sus componentes.
+        # Crear union de todas las componentes y limpiar la topología.
+        unidos = unary_union(LPC).buffer(0)  # pylint: disable=unused-variable
+        # Asegurar que PG y unidos tengan los vértices de su intersección.
+        PG_n_uni = (PG & unidos).buffer(0)
+        PG_dif_uni = (PG - unidos).buffer(0)
+        uni_dif_PG = (unidos - PG).buffer(0)
+
+        PG_v = (PG_n_uni | PG_dif_uni).buffer(0)
+        unidos_v = (PG_n_uni | uni_dif_PG).buffer(0)
+
+        # Calcular la diferencia
+        D = (PG_v - unidos_v).buffer(0)
+        # Listar todos los polígonos simples que componen la diferencia
+        LD = lpolys(D)
+
+        ## Recalcular LPC de forma que todas las componentes compartan los
+        ##  vértices de las diferencias.
+        D_unidos = unary_union(D).buffer(0)
+        LPC_v = []
+        for c in LPC:
+            c_limpio = c.buffer(0)
+            c_n_duni = (c_limpio & D_unidos).buffer(0)
+            c_dif_duni = (c_limpio - D_unidos).buffer(0)
+            c_v = (c_n_duni | c_dif_duni).buffer(0)
+            LPC_v.append(c_v)
+
+        # Crear una lista para almacenar cuellos (polígonos de la diferencia
+        #  que se intersecan con más de una parte componente.
+        cuellos = []
 
         # Iterar sobre los polígonos de la diferencia.
-        for i,p in enumerate(LD):  # Las miro una a una
+        for i, p in enumerate(LD):  # Las miro una a una
 
-            # Iniciar una lista para núcleos adyacentes.
+            # Iniciar una lista para componentes adyacentes.
             J=[]
             if verb > 0:
                 print(i,end=': ')
 
-            # Agregar a la lista los índices de los núcleos adyacentes.
-            for j, q in enumerate(LPC):  # Me fijo que PChicos tocas
-                # p es un polígono de la diferencia, q es un núcleo.
+            # Agregar a la lista los índices de las componentes adyacentes.
+            for j, q in enumerate(LPC_v):  # Me fijo que PChicos tocas
+                # p es un polígono de la diferencia, q es una componente.
                 if p.intersects(q):
                     if verb > 1:
                         print(i, j)
                     J.append(j)
 
-            # Si la lista de núcleos adyacentes tiene más de uno (es un cuello,
-            #  que es una parte significativa y no se une a nada).
+            # Si la lista de componentes adyacentes tiene más de uno (la
+            #  diferencia es un cuello, que es una parte significativa y no
+            #  se une a nada).
             if len(J)>1:
                 if verb > 0:
                     print(J)
+                cuellos.append(p)
+
 
             # Si la lista tiene un sólo núcleo (PC) adyacente, unirse
             elif len(J)==1:
                 j = J[0]
-                q = LPC[j]
-                LPC[j] = q.union(p)
+                q = LPC_v[j]
+                LPC_v[j] = (q.union(p)).buffer(0)
 
             # Si la lista de núcleos adyacentes está vacía, imprimir advertencia.
             else:
                 print("PROBLEMA")
 
-        # La recursión devuelve la lista de polígonos núcleos con sus
-        #  diferencias adyacentes unidas (y los cuellos?).
-        return LPC
+        # Extender la lista LPC con los cuellos.
+        LPC_v.extend(cuellos)
+
+        # La recursión devuelve la lista de componentes con sus
+        #  diferencias adyacentes unidas y los cuellos.
+        return LPC_v
 
 
 #%%
@@ -467,7 +522,7 @@ def agrupar_filtracion(F, verb=0):
 
 home_dir = Path.home()
 wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-fn = wdir / 'laguito' # 'saladito_muy_corto'
+fn = wdir / 'falladito' # 'laguito' # 'saladito_muy_corto'
 
 gdf = gpd.read_file(str(fn) + '.shp')
 
@@ -482,7 +537,7 @@ S = Polygon(coords)
 #gdf = gpd.geodataframe.GeoDataFrame(pd.DataFrame(D.items(),columns=['cod','geometry']))
 
 P = R
-FP = calcular_filtracion(P)
+FP = calcular_filtracion(P, prec=1/1024)
 
 #%%
 
@@ -505,7 +560,7 @@ gdfo.to_file(str(fn) + '_leaves.shp')
 FA = agrupar_filtracion(FP)
 gdfo = gpd.geodataframe.GeoDataFrame(FA, columns=['geometry'])
 gdfo = gdfo.set_crs(gdf.crs)
-gdfo.to_file(str(wdir) + 'agrupada.shp')
+gdfo.to_file(str(wdir / 'agrupada.shp'))
 
 #%%
 ###############################################################################
