@@ -10,6 +10,9 @@ from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
 
+#import exceptions
+from aux import exceptions
+
 
 # %% Listar Polígonos
 def lpolys(PMP):
@@ -97,6 +100,40 @@ def plot_polygon(polygon):
 
     return None
 
+# %% Reinflar
+def reinflado(P, d, eps=0.001, quad_segs=16):
+    buffered = P.buffer(-d, quad_segs=quad_segs).buffer(d+eps, quad_segs=quad_segs)
+    if not buffered.is_valid:
+        textos = [
+            'Buffered es invalido.',
+            f'{P = }',
+            f'{d = }',
+            f'{buffered = }',
+        ]
+        msg = '\n'.join(textos)
+        raise exceptions.InvalidGeometryError(msg)
+
+    return buffered
+    
+# %% Agregar Vertices necesarios
+def agregar_vertices(A,B,C=None):
+    A_n_B = (A & B).buffer(0)
+    if C:
+        A_dif_B = (A - B - C).buffer(0)
+    else:
+        A_dif_B = (A - B).buffer(0) 
+    B_dif_A = (B - A).buffer(0)
+
+    A_v = (A_n_B | A_dif_B).buffer(0)
+    B_v = (A_n_B | B_dif_A).buffer(0)
+    return A_v, B_v
+
+# %% save polygon
+def save_poly(P, fn='poly.shp'):
+    gpd.GeoDataFrame(geometry=P).to_file(fn)
+# %% save polygon
+def save_plist(L, fn='poly.shp'):
+    gpd.GeoDataFrame(geometry=L).to_file(fn)
 
 # %% Generar polígono
 def gen_poly(tipo='sintetico', nombre='pol_single_hole'):

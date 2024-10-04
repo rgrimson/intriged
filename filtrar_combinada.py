@@ -45,7 +45,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, eps=0.001):
         return Polygon()
 
     if verb > 0:
-        print(cod,r,ta)
+        print(f'\n{cod = }\n{r = }\n{ta = }')
 
     # Distancia de filtración (no analiza r en el primer paso).
     d = r + r_step
@@ -53,23 +53,14 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, eps=0.001):
     # Q es la intersección entre P y su buffereado
     #  (prácticamente el mismo buffereado, que debería estar contenido en P
     #  excepto porque tiene vértices que P no tiene).
-    Q = (P.intersection(P.buffer(-d, quad_segs=16).buffer(d+eps , quad_segs=16))).normalize()
+    buffered = helpers.reinflado(P, d, eps)        
+    Q = (P.intersection(buffered)).normalize()
     t = helpers.topo(Q)
 
     # Mientras que P y Q tengan misma cantidad de partes:
     while len(t)==len(ta):
         d += r_step
-        buffered = P.buffer(-d, quad_segs=16).buffer(d+eps, quad_segs=16)
-        if not buffered.is_valid:
-            textos = [
-                'Buffered es invalido.',
-                f'{P = }',
-                f'{d = }',
-                f'{buffered = }',
-            ]
-            msg = '\n'.join(textos)
-            raise exceptions.InvalidGeometryError(msg)
-
+        buffered = helpers.reinflado(P,d, eps)        
         Q = (P.intersection(buffered)).normalize()
         t = helpers.topo(Q)
 
@@ -109,7 +100,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, eps=0.001):
                 # Agregar esta parte Q (componente núcleo indivisible de P)
                 #  a `rta`.
                 if verb > 1:
-                    print(f'{frQ = }')
+                    print('Hoja')
                 rta.append((Q, d))
 
         return rta
@@ -155,7 +146,7 @@ def calcular_filtracion(P, r=0, r_step=1, verb=0, eps = 0.001):
 
 
 # %% Imprimir resultados de filtración recursiva
-def antirecursion(F, cod):
+def antirecursion(F, cod, verb=0):
     """Descomponer la recursión de `F` con código inicial `cod`."""
     # Lista de polígonos que se van a plotear al final de las impresiones.
     poligonos = []
@@ -189,9 +180,9 @@ def antirecursion(F, cod):
 
         # Si no, F es una lista de tuplas, recurrir:
         for i, f in enumerate(F):
-            _antirecursion(f, cod + str(i))
+            _antirecursion(f, cod + str(i), verb=verb)
 
-    _antirecursion(F, cod)
+    _antirecursion(F, cod, verb=verb)
     helpers.plot_polygon(MultiPolygon(poligonos))
 
     return None
@@ -216,24 +207,164 @@ def extraer_distancias(F):
 
     return distancias
 
+#%%
+
+#%%
+#Agrupar Filtración
+def agrupar_filtracion(F, verb=0, eps = 0.001):
+    """Agrupar una filtración.
+
+    Función recursiva que del árbol de filtración va tomando los últimos
+     polígonos núcleos indivisibles (hojas) y uniéndolos a las partes de
+     diferencias (respecto de su núcleo divisible de origen) que sólo son
+     adyacentes con cada uno de ellos y bajando un nivel del árbol hasta
+     analizar los núcleos de descomposición del polígono original.
+
+    Returns:
+        Una lista de polígonos con las partes significativas del polígono
+         original.
+    """
+    # Si el elemento es sólo un polígono (es indivisible), crear una lista
+    #  con él y salir de esa recursión devolviéndola.
+    P = F[0]
+    d = F[1]
+
+
+    if type(P)==Polygon:
+        print('o',end='')
+        return [P]
+    
+
+    # Si no, el elemento es una tupla de dos elementos, un polígono divisible y
+    #  su descomposición.
+    else:
+        P = F[0][0]
+        PED = F[1][0]
+        if type(PED[0]) == Polygon:
+            d = PED[1]
+            print('.',end='')
+        else:
+            d = PED[0][1]
+            print('-',end='')
+        # DescPG es tipo lista, iniciada con la lista de la descomposición de PG
+        DescPG = F[1]  # Descomposición del PG
+
+        # PG es tipo Polygon.
+        PG = P.buffer(0)  # Polígono grande
+
+        
+        # Reasignar a DescPG una lista con cada elemento una recursión de la
+        #  descomposición de PG
+        DescPG = [agrupar_filtracion(F) for F in DescPG]
+
+        # A partir de acá empiezan a salir los elementos de la descomposición
+        #  empezando por el último polígono divisible asignado en PG y sus
+        #  componentes (indivisibles [F] en la primer salida y divisibles
+        #  unidos con sus adyacentes después) listados en DescPG.
+        if verb > 1:
+            print(f'{PG = }')
+            print('DescPG:')
+            pprint(DescPG)
+
+        # Lista de polígonos chicos.
+        LPC = []
+        for LP in DescPG:
+            # Extender la lista LPC con todos los núcleos que componen a PG.
+            LPC.extend(LP)
+            
+        #R = helpers.reinflado(PG, d, eps) 
+
+        ## Diferencia entre el polígono divisible y todas sus componentes.
+        # Crear union de todas las componentes y limpiar la topología.
+        unidos = unary_union(LPC).buffer(0)  # pylint: disable=unused-variable
+        
+        
+        PG_v, unidos_v = helpers.agregar_vertices(PG, unidos)#, R)
+
+        # Calcular la diferencia
+        D = (PG_v - unidos_v).buffer(0)
+        # Listar todos los polígonos simples que componen la diferencia
+        LD = helpers.lpolys(D)
+
+        ## Recalcular LPC de forma que todas las componentes compartan los
+        ##  vértices de las diferencias.
+        D_unidos = unary_union(D).buffer(0)
+        LPC_v = []
+        for c in LPC:
+            c_limpio = c.buffer(0)
+            c_v,  frula = helpers.agregar_vertices(c_limpio, D_unidos)
+            LPC_v.append(c_v)
+
+        # Crear una lista para almacenar cuellos (polígonos de la diferencia
+        #  que se intersecan con más de una parte componente.
+        cuellos = []
+
+        # Iterar sobre los polígonos de la diferencia.
+        for i, p in enumerate(LD):  # Las miro una a una
+
+            # Iniciar una lista para componentes adyacentes.
+            J=[]
+            if verb > 0:
+                print(i,end=': ')
+
+            # Agregar a la lista los índices de las componentes adyacentes.
+            for j, q in enumerate(LPC_v):  # Me fijo que PChicos tocas
+                # p es un polígono de la diferencia, q es una componente.
+                if p.intersects(q):
+                    if verb > 1:
+                        print(i, j)
+                    J.append(j)
+
+            # Si la lista de componentes adyacentes tiene más de uno (la
+            #  diferencia es un cuello, que es una parte significativa y no
+            #  se une a nada).
+            if len(J)>1:
+                if verb > 0:
+                    print(J)
+                cuellos.append(p)
+
+
+            # Si la lista tiene un sólo núcleo (PC) adyacente, unirse
+            elif len(J)==1:
+                j = J[0]
+                q = LPC_v[j]
+                LPC_v[j] = (q.union(p)).buffer(0)
+
+            # Si la lista de núcleos adyacentes está vacía, imprimir advertencia.
+            else:
+                print("PROBLEMA")
+
+        # Extender la lista LPC con los cuellos.
+        LPC_v.extend(cuellos)
+
+        # La recursión devuelve la lista de componentes con sus
+        #  diferencias adyacentes unidas y los cuellos.
+        return LPC_v
+
+
+
 
 # %% Main
 def main():
     """Leer un shapefile, filtrarlo y verificar los radios."""
     home_dir = Path.home()
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-    fn = wdir / 'laguito' # 'saladito_muy_corto'
+    fn = wdir / 'tramo' #'laguito' # 'saladito_muy_corto'
     nombre = str(fn) + '.shp'
+    nombre_salida = str(fn) + '_desc.shp'
 
-    # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    #R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
     R = helpers.gen_poly(tipo='fn', nombre=nombre)
 
     # helpers.plot_polygon(R)
 
-    F = calcular_filtracion(R, verb=0)
+    F = calcular_filtracion(R, verb=3)
 
-    distancias = extraer_distancias(F)
-    print(f'{distancias = }')
+    #distancias = extraer_distancias(F)
+    #print(f'{distancias = }')
+
+    A = agrupar_filtracion(F, verb=0, eps = 0.001)
+    helpers.save_plist(A,nombre_salida)
 
     return None
 
