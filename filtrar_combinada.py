@@ -53,13 +53,13 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, eps=0.001):
     # Q es la intersección entre P y su buffereado
     #  (prácticamente el mismo buffereado, que debería estar contenido en P
     #  excepto porque tiene vértices que P no tiene).
-    Q = (P.intersection(P.buffer(-d).buffer(d+eps))).normalize()
+    Q = (P.intersection(P.buffer(-d, quad_segs=16).buffer(d+eps , quad_segs=16))).normalize()
     t = helpers.topo(Q)
 
     # Mientras que P y Q tengan misma cantidad de partes:
     while len(t)==len(ta):
         d += r_step
-        buffered = P.buffer(-d).buffer(d+eps)
+        buffered = P.buffer(-d, quad_segs=16).buffer(d+eps, quad_segs=16)
         if not buffered.is_valid:
             textos = [
                 'Buffered es invalido.',
@@ -160,7 +160,7 @@ def antirecursion(F, cod):
     # Lista de polígonos que se van a plotear al final de las impresiones.
     poligonos = []
 
-    def _antirecursion(F, cod):
+    def _antirecursion(F, cod, verb=0):
         """Función privada que imprime recursivamente la descomposición de F.
 
         F puede ser una tupla (P, d) de polígono núcleo indivisible de
@@ -171,24 +171,25 @@ def antirecursion(F, cod):
         f_0 = F[0]
         d = F[1]
 
-        # Crear una lista base de valores a imprimir.
-        base = [f'{cod = }', f'{d = }', f'{type(f_0) = }']
-        # Si F es polígono agregar también su topología.
+        # Crear una lista base de textos a imprimir.
+        textos = [f'{cod = }', f'{d = }', f'{type(f_0) = }']
+
+        # Si f_0 es polígono (si no, F es una lista de tuplas):
         if type(f_0) == Polygon:
-            base.append(f'{helpers.topo(f_0)}')
+            # Agregar la topología e imprimir los textos.
+            textos.append(f'{helpers.topo(f_0)}')
+            if verb > 0:
+                print("; ".join(textos), end='.\n')
 
-            print("; ".join(base), end='.\n')
-
-
-        if type(f_0) == Polygon:
+            # Agregar el polígono a la lista de polígonos a plotear y
+            #  salir de la recursión.
             poligonos.append(f_0)
-            # La única salida de recursión es agregando el polígono que trae F
-            #  a la lista de polígonos a imprimir.
+
             return None
 
-        else:
-            for i, f in enumerate(F):
-                _antirecursion(f, cod + str(i))
+        # Si no, F es una lista de tuplas, recurrir:
+        for i, f in enumerate(F):
+            _antirecursion(f, cod + str(i))
 
     _antirecursion(F, cod)
     helpers.plot_polygon(MultiPolygon(poligonos))
@@ -196,22 +197,46 @@ def antirecursion(F, cod):
     return None
 
 
+# %% Extraer distancias
+def extraer_distancias(F):
+    """Extraer las distancias de una filtración."""
+    distancias = []
+
+    def _antirecursion(F):
+        """Función privada que extrae las distancias en forma recursiva."""
+        f_0 = F[0]
+        d = F[1]
+        if type(f_0) == Polygon:
+            distancias.append(d)
+        else:
+            for f in F:
+                _antirecursion(f)
+
+    _antirecursion(F)
+
+    return distancias
+
+
 # %% Main
 def main():
     """Leer un shapefile, filtrarlo y verificar los radios."""
     home_dir = Path.home()
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-    fn = wdir / 'mwe2' #'falladito_invalid_P' #'mwe1'
+    fn = wdir / 'laguito' # 'saladito_muy_corto'
     nombre = str(fn) + '.shp'
 
-    R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    R = helpers.gen_poly(tipo='fn', nombre=nombre)
+
     # helpers.plot_polygon(R)
 
-    F = calcular_filtracion(R, verb=3)
+    F = calcular_filtracion(R, verb=0)
 
-    antirecursion(F, '')
+    distancias = extraer_distancias(F)
+    print(f'{distancias = }')
 
     return None
+
 
 if __name__ == '__main__':
     main()
