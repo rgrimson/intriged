@@ -71,9 +71,9 @@ def shapefile_from_geom(geoms, crs, fn):
 
     gdfo = gpd.geodataframe.GeoDataFrame(geoms, columns=['geometry'])
     gdfo = gdfo.set_crs(crs)
-    gdfo.to_file(str(fn) + '_invalid.shp')
+    gdfo.to_file(str(fn))
 
-    return 0
+    return None
 
 
 # %% Imprimir Polígono
@@ -95,4 +95,44 @@ def plot_polygon(polygon):
     plt.axis('scaled')
     plt.show()
 
-    return 0
+    return None
+
+
+# %% Generar polígono
+def gen_poly(tipo='sintetico', nombre='pol_single_hole'):
+    """Generar un polígono.
+
+    Tipos y nombres implementados:
+        tipo == 'sintetico', nombre == 'pol_single_hole' | 'pol_rafa'.
+        tipo == 'fn', nombre == path-like object.
+    """
+    if tipo == 'sintetico':
+        if nombre == 'pol_single_hole':
+            ext_coords = ((0., 0.), (0., 15.), (15., 15.), (15., 9.), (18., 9.),
+                    (21., 15.), (36., 15.), (36., 0.), (27., 0.), (27., 9.),
+                    (33., 9.), (33., 12.), (24., 12.), (24., 0.), (18., 0.),
+                    (18., 3.), (15., 6.), (15., 0.), (0., 0.))
+            pol_single = Polygon(ext_coords)
+            hole_coords = ((6., 3.), (6., 9.), (12., 9.), (9., 3.), (6., 3.))
+            hole = Polygon(hole_coords)
+            poly = pol_single.difference(hole)
+
+        elif nombre == 'pol_rafa':
+            coords = ((0., 0.), (0., 3.), (3., 3.), (3., 2.), (10.,2.), (10.,4.),
+                    (15.,4.), (15., -1.), (10., -1.), (10., 1.), (3., 1.),
+                    (3., 0.), (0., 0.))
+            poly = Polygon(coords)
+
+        else:
+            msg = f'No está implementado el poligono sintético solicitado: {nombre}.'
+            raise NotImplementedError(msg)
+
+    elif tipo == 'fn':
+        gdf = gpd.read_file(str(nombre))
+        poly = gdf.iloc[0].geometry
+
+    else:
+        msg = f'No está implementado el tipo solicitado: {tipo}.'
+        raise NotImplementedError(msg)
+
+    return poly

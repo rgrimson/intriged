@@ -102,7 +102,7 @@ def calcular_filtracion_recursiva(P, r, cod, r_step=1, verb=0, eps=0.001):
             if frQ:
                 # Agregar un elemento tupla a rta, formada por esta parte
                 #  núcleo componente, d y el resultado de filtrarla recursivamente.
-                rta.append((Q, d), frQ)
+                rta.append(((Q, d), frQ))
 
             # Si frQ devolvió Polygon() (falsy value)
             else:
@@ -169,12 +169,15 @@ def antirecursion(F, cod):
         """
 
         f_0 = F[0]
+        d = F[1]
 
         # Crear una lista base de valores a imprimir.
-        base = [f'{cod = }', f'{type(f_0) = }']
+        base = [f'{cod = }', f'{d = }', f'{type(f_0) = }']
         # Si F es polígono agregar también su topología.
         if type(f_0) == Polygon:
             base.append(f'{helpers.topo(f_0)}')
+
+            print("; ".join(base), end='.\n')
 
 
         if type(f_0) == Polygon:
@@ -189,4 +192,26 @@ def antirecursion(F, cod):
 
     _antirecursion(F, cod)
     helpers.plot_polygon(MultiPolygon(poligonos))
+
     return None
+
+
+# %% Main
+def main():
+    """Leer un shapefile, filtrarlo y verificar los radios."""
+    home_dir = Path.home()
+    wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
+    fn = wdir / 'mwe2' #'falladito_invalid_P' #'mwe1'
+    nombre = str(fn) + '.shp'
+
+    R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    # helpers.plot_polygon(R)
+
+    F = calcular_filtracion(R, verb=3)
+
+    antirecursion(F, '')
+
+    return None
+
+if __name__ == '__main__':
+    main()

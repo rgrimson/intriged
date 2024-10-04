@@ -3,3 +3,6 @@
 
 # Ignorar el directorio del proyecto vscode
 .vscode/
+
+# Ignorar todos los directorios __pycache__
+**/__pycache__/
