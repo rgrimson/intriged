@@ -71,12 +71,9 @@ def topo(P):
 # %% Crear shapefile a partir de una lista de geometrías
 def shapefile_from_geom(geoms, crs, fn):
     """Guardar el shapefile de una lista de geometrías."""
-
     gdfo = gpd.geodataframe.GeoDataFrame(geoms, columns=['geometry'])
     gdfo = gdfo.set_crs(crs)
     gdfo.to_file(str(fn))
-
-    return None
 
 
 # %% Imprimir Polígono
@@ -98,11 +95,12 @@ def plot_polygon(polygon):
     plt.axis('scaled')
     plt.show()
 
-    return None
 
 # %% Reinflar
 def reinflado(P, d, eps=0.001, quad_segs=16):
-    buffered = P.buffer(-d, quad_segs=quad_segs).buffer(d+eps, quad_segs=quad_segs)
+    """Reinflar un polígono en una distancia `d`."""
+    buffered = (P.buffer(-d, quad_segs=quad_segs)
+                .buffer(d+eps, quad_segs=quad_segs))
     if not buffered.is_valid:
         textos = [
             'Buffered es invalido.',
@@ -114,26 +112,34 @@ def reinflado(P, d, eps=0.001, quad_segs=16):
         raise exceptions.InvalidGeometryError(msg)
 
     return buffered
-    
+
+
 # %% Agregar Vertices necesarios
 def agregar_vertices(A,B,C=None):
+    """Agregar los vértices necesarios para operaciones de solapamiento."""
     A_n_B = (A & B).buffer(0)
     if C:
         A_dif_B = (A - B - C).buffer(0)
     else:
-        A_dif_B = (A - B).buffer(0) 
+        A_dif_B = (A - B).buffer(0)
     B_dif_A = (B - A).buffer(0)
 
     A_v = (A_n_B | A_dif_B).buffer(0)
     B_v = (A_n_B | B_dif_A).buffer(0)
     return A_v, B_v
 
-# %% save polygon
+
+# %% Save polygon
 def save_poly(P, fn='poly.shp'):
+    """Guardar un polígono a shapefile."""
     gpd.GeoDataFrame(geometry=P).to_file(fn)
-# %% save polygon
+
+
+# %% Save polygons list
 def save_plist(L, fn='poly.shp'):
+    """Guardar una lista de polígonos a shapefile."""
     gpd.GeoDataFrame(geometry=L).to_file(fn)
+
 
 # %% Generar polígono
 def gen_poly(tipo='sintetico', nombre='pol_single_hole'):
