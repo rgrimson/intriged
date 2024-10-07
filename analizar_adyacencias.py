@@ -177,6 +177,42 @@ def extraer_distancias(F):
     return distancias
 
 
+# %% Crear lista de diccionarios
+def crear_lista_de_diccionarios(F):
+    """Crear una lista de diccionarios con cada elemento de la filtración F."""
+    diccionarios = []
+
+    def _antirecursion(F):
+        """Función privada que extrae las geometrías en forma recursiva."""
+        dicc = {'cod': F['cod'], 'd': F['d'], 'geometry': F['P']}
+        diccionarios.append(dicc)
+        if F['F']:
+            for f in F['F']:
+                _antirecursion(f)
+
+    _antirecursion(F)
+
+    return diccionarios
+
+
+# %% Crear lista de diccionarios de hojas
+def crear_lista_de_hojas(F):
+    """Crear una lista de diccionarios con cada hoja de la filtración F."""
+    diccionarios = []
+
+    def _antirecursion(F):
+        """Función privada que extrae únicamente las hojas."""
+        if F['F']:
+            for f in F['F']:
+                _antirecursion(f)
+        else:
+            print('Hoja:', F['F'])
+            dicc = {'cod': F['cod'], 'd': F['d'], 'geometry': F['P']}
+            diccionarios.append(dicc)
+
+    _antirecursion(F)
+
+    return diccionarios
 # %% Main
 def main():
     """Leer un shapefile, filtrarlo y verificar los radios."""
@@ -186,18 +222,22 @@ def main():
     nombre = str(fn) + '.shp'
     nombre_salida = str(fn) + '_desc.shp'
 
-    R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
-    #R = helpers.gen_poly(tipo='fn', nombre=nombre)
+    # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    R = helpers.gen_poly(tipo='fn', nombre=nombre)
 
     # helpers.plot_polygon(R)
 
     F = calcular_filtracion_recursiva(R, verb=0)
 
-    antirecursion(F, verb=0)
+    # antirecursion(F, verb=0)
 
-    distancias = extraer_distancias(F)
-    print(f'{distancias = }')
+    # distancias = extraer_distancias(F)
+    # print(f'{distancias = }')
 
+    L = crear_lista_de_hojas(F)
+    # pprint(L)
+
+    helpers.shapefile_from_data(L, crs='EPSG:32721', fn=nombre_salida)
     #A = agrupar_filtracion(F, verb=0, eps = 0.001)
     #helpers.save_plist(A,nombre_salida)
 

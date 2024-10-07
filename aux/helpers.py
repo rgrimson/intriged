@@ -141,6 +141,13 @@ def save_plist(L, fn='poly.shp'):
     gpd.GeoDataFrame(geometry=L).to_file(fn)
 
 
+# %% Crear shapefile a partir de lista de diccionarios
+def shapefile_from_data(data, crs, fn):
+    """Guardar el shapefile de una lista de geometrías."""
+    gdf = gpd.geodataframe.GeoDataFrame(data, crs=crs)
+    gdf.to_file(str(fn))
+
+
 # %% Generar polígono
 def gen_poly(tipo='sintetico', nombre='pol_single_hole'):
     """Generar un polígono.
