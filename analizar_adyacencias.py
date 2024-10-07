@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Analizar adyacencias en una filtración."""
+
+# %% Librerías
+from pathlib import Path
+from pprint import pprint
+
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+from shapely.geometry.polygon import Polygon
+from shapely.geometry.multipolygon import MultiPolygon
+from shapely.geometry.collection import GeometryCollection
+from shapely import unary_union
+
+from aux import helpers
+from aux import exceptions
+
+
+# %% Calcular Filtración Recursiva
+def calcular_filtracion_recursiva(P, cod='0', r=0, r_step=1, verb=0, eps=0.001):
+    """Calcular la filtración recursiva de P.
+
+    Returns:
+        Un diccionario {'cod': cod, 'd': d, 'P': P, 'F': F}, donde F puede ser
+        None si P es indivisible y se absorbe en d, o una lista de dos o más
+        elementos, donde cada elemento es un diccionario correspondiente a cada
+        parte de la descomposición de P en d.
+    """
+    # Empezar limpiando los vértices de P.
+    P = P.buffer(0)
+
+    # P tiene que ser un polígono singlepart, si no eleva un error.
+    if not isinstance(P, Polygon):
+        textos = ['P no es un poligono singlepart.',
+                  f'{cod = }',
+                  f'{r = }',
+                  f'{P = }']
+        msg = '\n'.join(textos)
+        raise exceptions.NotAPolygonError(msg)
+
+    # P tiene que ser un polígono válido, si no eleva un error.
+    if not P.is_valid:
+        textos = ['P es invalido.',
+                  f'{cod = }',
+                  f'{r = }',
+                  f'{P = }']
+        msg = '\n'.join(textos)
+        raise exceptions.InvalidGeometryError(msg)
+
+    # P no puede ser un polígono vacío, si no eleva un error.
+    if P.is_empty:
+        textos = ['P es vacío.',
+                  f'{cod = }',
+                  f'{r = }',
+                  f'{P = }']
+        msg = '\n'.join(textos)
+        raise exceptions.EmptyGeometryError(msg)
+
+    # Topología de P.
+    topo_P = helpers.topo(P)
+
+    if verb > 0:
+        print(f'\n{cod = }\n{r = }\n{topo_P = }')
+
+    # Distancia de filtración.
+    d = r + r_step
+
+    # Q es la intersección entre P y su buffereado
+    #  (prácticamente el mismo buffereado, que debería estar contenido en P
+    #  excepto porque tiene vértices que P no tiene).
+    buffered = helpers.reinflado(P, d, eps)
+    Q = (P.intersection(buffered)).normalize()
+    topo_Q = helpers.topo(Q)
+
+    # Mientras que P y Q tengan misma cantidad de partes:
+    while len(topo_P) == len(topo_Q):
+        d += r_step
+        buffered = helpers.reinflado(P, d, eps)
+        Q = (P.intersection(buffered)).normalize()
+        topo_Q = helpers.topo(Q)
+
+    # En este momento, Q tiene más partes que P, o es un polígono vacío (si P
+    #  se absorbió sin haberse descompuesto); y d es la distancia para la que
+    #  cambió la topología de P.
+
+    # Iniciar el diccionario de respuesta.
+    rta = {
+        'cod': cod,
+        'P': P,
+        'd': d,
+        'F': None
+    }
+
+    # LQ es una lista de Polygons partes de Q o [Polygon()].
+    # Estos polígonos son los núcleos componentes de P.
+    LQ = helpers.lpolys(Q)
+
+    # Si Q tiene más de una componente Polygon, descomponer P:
+    if len(LQ) > 1:
+        # rta['F'] pasa a ser una lista con al menos dos elementos.
+        # Cada elemento es el diccionario de respuesta de la filtración de Q.
+        rta['F'] = []
+        # Por cada parte de Q:
+        for i, Q in enumerate(LQ):
+            # Calcular esta misma filtración para cada núcleo, llevando un
+            #  código que concatena índices de cada parte en forma recursiva, y
+            #  una distancia inicial que es la distancia en la que se generó
+            #  esta parte.
+            frQ = calcular_filtracion_recursiva(Q, cod+str(i), d, r_step, verb,
+                                                 eps)
+            rta['F'].append(frQ)
+
+        return rta
+
+    # Si no, LQ tiene una sola parte.
+    # Si esa parte no es un polígono vacío (falsy value) quizás Q tenía partes
+    #  no poligonales que se perdieron al convertir a lista? Analizarlo.
+    if LQ[0]:
+        textos = ['Filtración de un solo elemento no vacío.',
+                  f'{cod = }',
+                  f'{d = }',
+                  f'{LQ = }']
+        msg = '\n'.join(textos)
+        raise exceptions.FiltrationError(msg)
+
+    # Si no, LQ == [Polygon()] y sale de la recursión devolviendo el
+    #  diccionario de respuesta construído (rta['F'] == None).
+    return rta
+
+
+# %% Imprimir resultados de filtración recursiva
+def antirecursion(F, verb=0):
+    """Descomponer la recursión de una filtración."""
+    # Lista de polígonos que se van a plotear al final de las impresiones.
+    poligonos = []
+
+    def _antirecursion(F, verb=0):
+        """Función privada que imprime recursivamente la descomposición de F.
+
+        F es un diccionario {'cod': cod, 'd': d, 'P': P, 'F': F}.
+        """
+        # Agregar F['P'] a la lista de polígonos.
+        poligonos.append(F['P'])
+
+        if verb > 0:
+            textos = [f'{F["cod"] = }',
+                    f'{helpers.topo(F["P"]) = }',
+                    f'{F["d"] = }']
+            print('\n'.join(textos), end='.\n')
+
+        # Si F['F'] no es None, entonces es una nueva filtración.
+        if F['F']:
+            for f in F['F']:
+                _antirecursion(f, verb)
+
+    _antirecursion(F, verb)
+    print()
+    helpers.plot_polygon(MultiPolygon(poligonos))
+
+
+# %% Extraer distancias
+def extraer_distancias(F):
+    """Extraer las distancias de una filtración."""
+    distancias = []
+
+    def _antirecursion(F):
+        """Función privada que extrae las distancias en forma recursiva."""
+        distancias.append(F['d'])
+        if F['F']:
+            for f in F['F']:
+                _antirecursion(f)
+
+    _antirecursion(F)
+
+    return distancias
+
+
+# %% Main
+def main():
+    """Leer un shapefile, filtrarlo y verificar los radios."""
+    home_dir = Path.home()
+    wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
+    fn = wdir / 'laguito' # 'saladito_muy_corto'
+    nombre = str(fn) + '.shp'
+    nombre_salida = str(fn) + '_desc.shp'
+
+    R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    #R = helpers.gen_poly(tipo='fn', nombre=nombre)
+
+    # helpers.plot_polygon(R)
+
+    F = calcular_filtracion_recursiva(R, verb=0)
+
+    antirecursion(F, verb=0)
+
+    distancias = extraer_distancias(F)
+    print(f'{distancias = }')
+
+    #A = agrupar_filtracion(F, verb=0, eps = 0.001)
+    #helpers.save_plist(A,nombre_salida)
+
+
+if __name__ == '__main__':
+    main()
