@@ -243,6 +243,7 @@ def obtener_cuellos(P, hojas, eps=0.001, verb=0):
     # D es una geometría de la diferencia, que puede ser un cuello o una
     #  medialuna, dependiendo de la cantidad de hojas con las que interseca.
     for i, D in enumerate(diff):
+        # TODO: Decidir por ínidice de Miller y por ratio interseccion/area.
         # n lleva la cuenta de intersecciones (si n > 1, D es cuello).
         n = 0
         # j es el índice de las hojas cuyo bbox interseca el de D.
@@ -260,6 +261,7 @@ def obtener_cuellos(P, hojas, eps=0.001, verb=0):
 
         # Si no, si n == 1, D es medialuna, si no es cuello.
         if n > 1:
+            # TODO: Analizar el d de las hojas que intersecan
             cuellos.append(D)
 
     return cuellos
@@ -270,7 +272,7 @@ def main():
     """Leer un shapefile, filtrarlo y verificar los radios."""
     home_dir = Path.home()
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-    fn = wdir / 'saladito_muy_corto'  # 'laguito' # 'saladito_muy_corto'
+    fn = wdir / 'laguito' #'saladito_muy_corto'  # 'laguito' # 'saladito_muy_corto'
     nombre = str(fn) + '.shp'
 
     # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
@@ -279,7 +281,7 @@ def main():
     # helpers.plot_polygon(R)
 
     print('Calculando filtración recursiva...')
-    F = calcular_filtracion_recursiva(R)
+    F = calcular_filtracion_recursiva(R, r_step=1)
 
     print('Guardando shapefile de filtración...')
     D = crear_lista_de_diccionarios(F)
@@ -288,8 +290,8 @@ def main():
 
     # antirecursion(F, verb=0)
 
-    # distancias = extraer_distancias(F)
-    # print(f'{distancias = }')
+    distancias = extraer_distancias(F)
+    print(f'{distancias = }')
 
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
