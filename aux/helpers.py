@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
+from shapely import unary_union
 
 #import exceptions
 from aux import exceptions
@@ -127,6 +128,31 @@ def agregar_vertices(A,B,C=None):
     A_v = (A_n_B | A_dif_B).buffer(0)
     B_v = (A_n_B | B_dif_A).buffer(0)
     return A_v, B_v
+
+
+# %% Obtener intersección y diferencia
+def get_inter_diff(P, lista, eps, quad_segs=16):
+    """Obtener la intersección y la diferencia.
+
+    Dados un polígono `P` y una lista de polígonos `lista`,
+    unir la lista, inflarla en `eps` y obtener P & list y P - list.
+    """
+    unidos = unary_union(lista)
+    buffered = unidos.buffer(eps, quad_segs=quad_segs)
+
+    if not buffered.is_valid:
+        textos = [
+            'Geometría no válida al hacer buffer de la lista unida.',
+            f'{lista = }',
+            f'{buffered = }',
+        ]
+        msg = '\n'.join(textos)
+        raise exceptions.InvalidGeometryError(msg)
+
+    inter = lpolys(P.intersection(buffered))
+    diff = lpolys(P.difference(buffered))
+
+    return inter, diff
 
 
 # %% Save polygon

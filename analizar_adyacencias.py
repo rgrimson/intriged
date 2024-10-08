@@ -5,6 +5,7 @@
 # %% Librerías
 from pathlib import Path
 from pprint import pprint
+from rtree import index
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -206,19 +207,70 @@ def crear_lista_de_hojas(F):
             for f in F['F']:
                 _antirecursion(f)
         else:
-            print('Hoja:', F['F'])
             dicc = {'cod': F['cod'], 'd': F['d'], 'geometry': F['P']}
             diccionarios.append(dicc)
 
     _antirecursion(F)
 
     return diccionarios
+
+
+# %% Obtener cuellos
+def obtener_cuellos(P, hojas, eps=0.001, verb=0):
+    """Obtener una lista de cuellos de un polígono a partir de sus hojas."""
+    # inter son las hojas, diff son cuellos y medialunas.
+    inter, diff = helpers.get_inter_diff(P, hojas, eps)
+    if verb > 0:
+        print(f'{len(inter) = }')
+        print(f'{len(diff) = }')
+
+    # Inicializar una lista para almacenar cuellos.
+    cuellos = []
+
+    # Crear un índice R-tree
+    idx = index.Index()
+
+    # Completar el indice usando el bbox de cada hoja
+    if verb > 0:
+        print("Armando indice...")
+    for i, hoja in enumerate(inter):
+        idx.insert(i, hoja.bounds)
+
+    # Analizar cada diferencia para detectar si es cuello o medialuna
+    if verb > 0:
+        print("Calculando intersecciones...")
+
+    # D es una geometría de la diferencia, que puede ser un cuello o una
+    #  medialuna, dependiendo de la cantidad de hojas con las que interseca.
+    for i, D in enumerate(diff):
+        # n lleva la cuenta de intersecciones (si n > 1, D es cuello).
+        n = 0
+        # j es el índice de las hojas cuyo bbox interseca el de D.
+        for j in idx.intersection(D.bounds):  # pylint: disable=not-an-iterable
+            if D.intersects(inter[j]):
+                n += 1
+
+        # Si n == 0, hubo un problema con la filtración. Analizarlo.
+        if n == 0:
+            textos = ['Parte de la diferencia no intersecta ninguna hoja.',
+                      f'{i = }',
+                      f'{D = }']
+            msg = '\n'.join(textos)
+            raise exceptions.FiltrationError(msg)
+
+        # Si no, si n == 1, D es medialuna, si no es cuello.
+        if n > 1:
+            cuellos.append(D)
+
+    return cuellos
+
+
 # %% Main
 def main():
     """Leer un shapefile, filtrarlo y verificar los radios."""
     home_dir = Path.home()
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-    fn = wdir / 'laguito' # 'saladito_muy_corto'
+    fn = wdir / 'saladito_muy_corto'  # 'laguito' # 'saladito_muy_corto'
     nombre = str(fn) + '.shp'
     nombre_salida = str(fn) + '_desc.shp'
 
@@ -227,19 +279,38 @@ def main():
 
     # helpers.plot_polygon(R)
 
-    F = calcular_filtracion_recursiva(R, verb=0)
+    print('Calculando filtración recursiva...')
+    F = calcular_filtracion_recursiva(R)
 
     # antirecursion(F, verb=0)
 
     # distancias = extraer_distancias(F)
     # print(f'{distancias = }')
 
+    print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
     # pprint(L)
 
-    helpers.shapefile_from_data(L, crs='EPSG:32721', fn=nombre_salida)
-    #A = agrupar_filtracion(F, verb=0, eps = 0.001)
-    #helpers.save_plist(A,nombre_salida)
+    nombre_hojas = str(fn) + '_hojas.shp'
+    helpers.shapefile_from_data(L, crs='EPSG:32721', fn=nombre_hojas)
+    # A = agrupar_filtracion(F, verb=0, eps = 0.001)
+    # helpers.save_plist(A,nombre_salida)
+
+    hojas = [hoja['geometry'] for hoja in L]
+    # pprint(hojas)
+    # helpers.plot_polygon(MultiPolygon(hojas))
+    print('Obteniendo cuellos...')
+    cuellos = obtener_cuellos(R, hojas)
+
+    # Una vez que se obtienen los cuellos, las partes significativas son
+    #  la intersección y la diferencia entre R y cuellos.
+    print('Obteniendo partes significativas...')
+    inter, diff = helpers.get_inter_diff(R, cuellos, 0.001)
+    partes = inter + diff
+
+    print('Guardando shapefile...')
+    helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_salida)
+    # helpers.plot_polygon(MultiPolygon(partes))
 
 
 if __name__ == '__main__':
