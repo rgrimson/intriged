@@ -272,7 +272,6 @@ def main():
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
     fn = wdir / 'saladito_muy_corto'  # 'laguito' # 'saladito_muy_corto'
     nombre = str(fn) + '.shp'
-    nombre_salida = str(fn) + '_desc.shp'
 
     # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
     R = helpers.gen_poly(tipo='fn', nombre=nombre)
@@ -281,6 +280,11 @@ def main():
 
     print('Calculando filtración recursiva...')
     F = calcular_filtracion_recursiva(R)
+
+    print('Guardando shapefile de filtración...')
+    D = crear_lista_de_diccionarios(F)
+    nombre_filtr = str(fn) + '_filtr.shp'
+    helpers.shapefile_from_data(D, crs='EPSG:32721', fn=nombre_filtr)
 
     # antirecursion(F, verb=0)
 
@@ -291,6 +295,7 @@ def main():
     L = crear_lista_de_hojas(F)
     # pprint(L)
 
+    print('Guardando shapefile de hojas...')
     nombre_hojas = str(fn) + '_hojas.shp'
     helpers.shapefile_from_data(L, crs='EPSG:32721', fn=nombre_hojas)
     # A = agrupar_filtracion(F, verb=0, eps = 0.001)
@@ -302,14 +307,20 @@ def main():
     print('Obteniendo cuellos...')
     cuellos = obtener_cuellos(R, hojas)
 
+    print('Guardando shapefile de cuellos...')
+    nombre_cuellos = str(fn) + '_cuellos.shp'
+    helpers.shapefile_from_geom(cuellos, crs='EPSG:32721', fn=nombre_cuellos)
+    # helpers.plot_polygon(MultiPolygon(cuellos))
+
     # Una vez que se obtienen los cuellos, las partes significativas son
     #  la intersección y la diferencia entre R y cuellos.
     print('Obteniendo partes significativas...')
     inter, diff = helpers.get_inter_diff(R, cuellos, 0.001)
     partes = inter + diff
 
-    print('Guardando shapefile...')
-    helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_salida)
+    print('Guardando shapefile de descomposición...')
+    nombre_desc = str(fn) + '_desc.shp'
+    helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
     # helpers.plot_polygon(MultiPolygon(partes))
 
 
