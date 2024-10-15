@@ -217,7 +217,7 @@ def crear_lista_de_hojas(F):
 
 # %% Obtener diferencias
 def obtener_diferencias(P, hojas, eps=0.001, verb=0):
-    """Obtener una lista de cuellos de un polígono a partir de sus hojas.
+    """Obtener una lista de diferencias de un polígono a partir de sus hojas.
 
     hojas es una lista de diccionarios de hojas, extraído con
     crear_lista_de_hojas.
@@ -244,11 +244,12 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
     # D es un diccionario {'geometry': diff} con la geometría de la diferencia,
     #  que puede ser un cuello o una medialuna.
     for i, D in enumerate(diff):
-        # TODO: Decidir por índice de Miller y por ratio interseccion/area.
+
         # n lleva la cuenta de adyacencias.
         n = 0
         # len_inter lleva el largo de las intersecciones.
         len_inter = 0
+
         # j es el índice de las hojas cuyo bbox interseca el de D.
         for j in idx.intersection(D['geometry'].bounds):  # pylint: disable=not-an-iterable
             if D['geometry'].intersects(inter[j]['geometry']):
@@ -261,6 +262,10 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
                 #  distancias.
                 D['dists'].append(inter[j]['d'])
 
+                # Calcular el largo de la intersección y sumarlo a len_inter.
+                lines = inter[j]['geometry'].intersection(D['geometry'])
+                len_inter += helpers.get_length(lines)
+
         # Si n == 0, hubo un problema con la filtración. Analizarlo.
         if n == 0:
             textos = ['Parte de la diferencia no intersecta ninguna hoja.',
@@ -271,10 +276,33 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
 
         # Agregar la cantidad de adyacencias al diccionario D.
         D['n'] = n
+        # Calcular el area y el ratio len_inter^2 / area.
+        D['ratio'] = (len_inter * len_inter) / D['geometry'].area
 
         # Agregar el índice de Miller.
+        D['miller'] = helpers.get_miller(D['geometry'])
 
-        # Agregar el ratio interseccion area
+    return diff
+
+
+# %% Etiquetar cuellos
+def etiquetar_cuellos(diff, max_ratio=1, max_miller=0.5, min_d=200):
+    """Etiquetar cuellos en la lista de diferencias."""
+    for d in diff:
+
+        # Solo analizar si tiene ratio y miller chicos.
+        if d['ratio'] <= max_ratio and d['miller'] <= max_miller:
+
+            # Si tiene sólo una adyacencia ya es cuello.
+            if d['n'] == 1:
+                d['es_cuello'] = True
+
+            # Si no, analizar las diferencias de distancias
+            else:
+                distancia = max(d['dists']) - min(d['dists'])
+                # Si la diferencia de distancias es grande, es cuello.
+                if distancia >= min_d:
+                    d['es_cuello'] = True
 
     return diff
 
@@ -321,10 +349,11 @@ def main():
     # helpers.plot_polygon(MultiPolygon(hojas))
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
+    etiquetadas = etiquetar_cuellos(diferencias)
 
     print('Guardando shapefile de diferencias...')
     nombre_difs = str(fn) + '_difs.shp'
-    helpers.shapefile_from_data(diferencias, crs='EPSG:32721', fn=nombre_difs)
+    helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_difs)
     # helpers.plot_polygon(MultiPolygon(cuellos))
 
     # Una vez que se obtienen los cuellos, las partes significativas son

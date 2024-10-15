@@ -12,6 +12,11 @@ class NotAPolygonError(Exception):
     """Excepción para elevar si no el objeto no es un polígono."""
 
 
+# %% NotALineStringError
+class NotALineStringError(Exception):
+    """Excepción para elevar si no el objeto no es un polígono."""
+
+
 # %% EmptyGeometryError
 class EmptyGeometryError(Exception):
     """Excepción para geometrías vacías."""

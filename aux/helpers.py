@@ -3,12 +3,19 @@
 """Proveer funciones auxiliares para las filtraciones."""
 
 # %% Librerías
+import math
+
 import geopandas as gpd
 import matplotlib.pyplot as plt
 
-from shapely.geometry.polygon import Polygon
-from shapely.geometry.multipolygon import MultiPolygon
-from shapely.geometry.collection import GeometryCollection
+
+from shapely.geometry import (
+    LineString,
+    MultiLineString,
+    Polygon,
+    MultiPolygon,
+    GeometryCollection,
+)
 from shapely import unary_union
 
 #import exceptions
@@ -189,19 +196,48 @@ def get_inter_diff(P, hojas, eps, quad_segs=16):
         'n': 0,  # Cuenta de adyacencias.
         'cods': [],  # Códigos de las hojas adyacentes.
         'dists': [],  # Distancias de filtracion de las hojas adyacentes.
-        'Miller': 0
-        } for dif in diferencias]
+        'miller': 0,  # Coeficiente de Miller.
+        'ratio': 0,
+        'es_cuello': False
+    } for dif in diferencias]
 
     return inter, diff
 
 
-# %% Obtener una hoja por su id
-def get_hoja(hoja_id, hojas):
-    """Obtener una hoja por su código."""
-    # Generar un iterador con las hojas que satisfacen que
-    #  hoja['hoja_id'] == hoja_id
-    #  y devolver el primero de ese iterador o None si está vacío.
-    return next((hoja for hoja in hojas if hoja['hoja_id'] == hoja_id), None)
+# %% Obtener el largo de una interseccion
+def get_length(geom):
+    """Obtener el largo de una geometría línea o multilínea.
+
+    Si el tipo no es línea o multilínea eleva una excepción
+    NotALineStringError.
+    """
+    total_length = 0
+    if isinstance(geom, LineString):
+        total_length = geom.length
+    elif isinstance(geom, MultiLineString):
+        total_length = sum(line.length for line in geom.geoms)
+    else:
+        msg = "Error al calcular el largo de la geometría."
+        raise exceptions.NotALineStringError(msg)
+
+    return total_length
+
+
+# %% Obtener el coeficiente de Miller
+def get_miller(polygon):
+    """Obtener el coeficiente de Miller."""
+    if not isinstance(polygon, Polygon):
+        raise exceptions.NotAPolygonError
+
+    area = polygon.area
+    perim = polygon.length
+
+    if perim == 0:
+        raise exceptions.EmptyGeometryError
+
+    miller = (4 * math.pi * area) / (perim * perim)
+
+    return miller
 
 
 # %% Save polygon
