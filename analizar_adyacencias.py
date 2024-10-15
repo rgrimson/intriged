@@ -286,7 +286,7 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
 
 
 # %% Etiquetar cuellos
-def etiquetar_cuellos(diff, max_ratio=1, max_miller=0.5, min_d=200):
+def etiquetar_cuellos(diff, max_ratio=1.5, max_miller=0.5, min_d=200):
     """Etiquetar cuellos en la lista de diferencias."""
     for d in diff:
 
@@ -307,6 +307,26 @@ def etiquetar_cuellos(diff, max_ratio=1, max_miller=0.5, min_d=200):
     return diff
 
 
+# %% Obtener partes significativas
+def obtener_partes_significativas(P, cuellos, eps=0.001, quad_segs=16):
+    """Obtener las partes significativas de P.
+
+    `cuellos` es una lista de geometrías de cuellos.
+    """
+    unidos = unary_union(cuellos)
+    buffered = unidos.buffer(eps, quad_segs=quad_segs)
+
+    if not buffered.is_valid:
+        raise exceptions.InvalidGeometryError
+
+    intersecciones = helpers.lpolys(P.intersection(buffered))
+    diferencias = helpers.lpolys(P.difference(buffered))
+
+    partes = intersecciones + diferencias
+
+    return partes
+
+
 # %% Main
 def main():
     """Leer un shapefile, filtrarlo y verificar los radios."""
@@ -322,7 +342,7 @@ def main():
     # helpers.plot_polygon(R)
 
     print('Calculando filtración recursiva...')
-    F = calcular_filtracion_recursiva(R, r_step=100)
+    F = calcular_filtracion_recursiva(R, r_step=1)
 
     print('Guardando shapefile de filtración...')
     D = crear_lista_de_diccionarios(F)
@@ -331,40 +351,41 @@ def main():
 
     # antirecursion(F, verb=0)
 
-    distancias = extraer_distancias(F)
-    print(f'{distancias = }')
+    # distancias = extraer_distancias(F)
+    # print(f'{distancias = }')
 
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
-    pprint(L)
+    # pprint(L)
 
     print('Guardando shapefile de hojas...')
     nombre_hojas = str(fn) + '_hojas.shp'
     helpers.shapefile_from_data(L, crs='EPSG:32721', fn=nombre_hojas)
-    # A = agrupar_filtracion(F, verb=0, eps = 0.001)
-    # helpers.save_plist(A,nombre_salida)
 
     # hojas = [hoja['geometry'] for hoja in L]
     # pprint(hojas)
     # helpers.plot_polygon(MultiPolygon(hojas))
+
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
     etiquetadas = etiquetar_cuellos(diferencias)
 
-    print('Guardando shapefile de diferencias...')
+    print('Guardando shapefile de diferencias etiquetadas...')
     nombre_difs = str(fn) + '_difs.shp'
     helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_difs)
+
+    # print("Extrayendo cuellos...")
+    cuellos = [e['geometry'] for e in etiquetadas if e['es_cuello']]
     # helpers.plot_polygon(MultiPolygon(cuellos))
 
     # Una vez que se obtienen los cuellos, las partes significativas son
     #  la intersección y la diferencia entre R y cuellos.
     print('Obteniendo partes significativas...')
-    # inter, diff = helpers.get_inter_diff(R, cuellos, 0.001)
-    # partes = inter + diff
+    partes = obtener_partes_significativas(R, cuellos)
 
     print('Guardando shapefile de descomposición...')
-    # nombre_desc = str(fn) + '_desc.shp'
-    # helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
+    nombre_desc = str(fn) + '_desc.shp'
+    helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
     # helpers.plot_polygon(MultiPolygon(partes))
 
 
