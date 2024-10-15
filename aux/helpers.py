@@ -131,12 +131,45 @@ def agregar_vertices(A,B,C=None):
 
 
 # %% Obtener intersección y diferencia
-def get_inter_diff(P, lista, eps, quad_segs=16):
+def get_inter_diff(P, hojas, eps, quad_segs=16):
     """Obtener la intersección y la diferencia.
 
-    Dados un polígono `P` y una lista de polígonos `lista`,
-    unir la lista, inflarla en `eps` y obtener P & list y P - list.
+    Dados un polígono `P` y una lista de diccionarios de hojas `hojas`,
+    obtener P & list y P - list.
+    `hojas` tiene la estructura: [{'cod': cod, 'd': d, 'geometry': H}, ...].
+
+    Devolver una lista `inter` de diccionarios de la forma:
+    [{'cod': cod, 'd': d, 'geometry': inter_geom}, ...],
+    y una lista `diff` de diccionarios de la forma:
+    [{'geometry': diff_geom}, ...] para ser luego llenada con los atributos
+    de las adyacencias.
     """
+    # Calcular la intersección una por una para no perder la estructura de
+    #  los diccionarios.
+    def _intersecar(P, hoja_geom, eps, quad_segs):
+        inter_geom = (hoja_geom
+                      .buffer(eps, quad_segs=quad_segs)
+                      .intersection(P)
+        )
+        if not inter_geom.is_valid:
+            msg = "`intersecar` no es valido."
+            raise exceptions.InvalidGeometryError(msg)
+
+        return inter_geom
+
+    # Agregar además un identificador numérico a cada hoja
+    inter = [{
+        'cod': hoja['cod'],
+        'd': hoja['d'],
+        'geometry': _intersecar(P, hoja['geometry'], eps, quad_segs)
+    } for hoja in hojas]
+
+    # Para las diferencias, extraer las geometrías de las hojas y crear un
+    #  multipolígono por unaray_union, hacerles un buffer de `eps` y calcular
+    #  las diferencias.
+    # Devolver una estructura similar (lista de diccionarios) para después
+    #  completar con datos de adyacencias.
+    lista = [hoja['geometry'] for hoja in hojas]
     unidos = unary_union(lista)
     buffered = unidos.buffer(eps, quad_segs=quad_segs)
 
@@ -149,10 +182,26 @@ def get_inter_diff(P, lista, eps, quad_segs=16):
         msg = '\n'.join(textos)
         raise exceptions.InvalidGeometryError(msg)
 
-    inter = lpolys(P.intersection(buffered))
-    diff = lpolys(P.difference(buffered))
+    diferencias = lpolys(P.difference(buffered))
+
+    diff = [{
+        'geometry': dif,
+        'n': 0,  # Cuenta de adyacencias.
+        'cods': [],  # Códigos de las hojas adyacentes.
+        'dists': [],  # Distancias de filtracion de las hojas adyacentes.
+        'Miller': 0
+        } for dif in diferencias]
 
     return inter, diff
+
+
+# %% Obtener una hoja por su id
+def get_hoja(hoja_id, hojas):
+    """Obtener una hoja por su código."""
+    # Generar un iterador con las hojas que satisfacen que
+    #  hoja['hoja_id'] == hoja_id
+    #  y devolver el primero de ese iterador o None si está vacío.
+    return next((hoja for hoja in hojas if hoja['hoja_id'] == hoja_id), None)
 
 
 # %% Save polygon

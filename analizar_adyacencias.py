@@ -215,17 +215,18 @@ def crear_lista_de_hojas(F):
     return diccionarios
 
 
-# %% Obtener cuellos
-def obtener_cuellos(P, hojas, eps=0.001, verb=0):
-    """Obtener una lista de cuellos de un polígono a partir de sus hojas."""
+# %% Obtener diferencias
+def obtener_diferencias(P, hojas, eps=0.001, verb=0):
+    """Obtener una lista de cuellos de un polígono a partir de sus hojas.
+
+    hojas es una lista de diccionarios de hojas, extraído con
+    crear_lista_de_hojas.
+    """
     # inter son las hojas, diff son cuellos y medialunas.
     inter, diff = helpers.get_inter_diff(P, hojas, eps)
     if verb > 0:
         print(f'{len(inter) = }')
         print(f'{len(diff) = }')
-
-    # Inicializar una lista para almacenar cuellos.
-    cuellos = []
 
     # Crear un índice R-tree
     idx = index.Index()
@@ -234,22 +235,31 @@ def obtener_cuellos(P, hojas, eps=0.001, verb=0):
     if verb > 0:
         print("Armando indice...")
     for i, hoja in enumerate(inter):
-        idx.insert(i, hoja.bounds)
+        idx.insert(i, hoja['geometry'].bounds)
 
     # Analizar cada diferencia para detectar si es cuello o medialuna
     if verb > 0:
         print("Calculando intersecciones...")
 
-    # D es una geometría de la diferencia, que puede ser un cuello o una
-    #  medialuna, dependiendo de la cantidad de hojas con las que interseca.
+    # D es un diccionario {'geometry': diff} con la geometría de la diferencia,
+    #  que puede ser un cuello o una medialuna.
     for i, D in enumerate(diff):
-        # TODO: Decidir por ínidice de Miller y por ratio interseccion/area.
-        # n lleva la cuenta de intersecciones (si n > 1, D es cuello).
+        # TODO: Decidir por índice de Miller y por ratio interseccion/area.
+        # n lleva la cuenta de adyacencias.
         n = 0
+        # len_inter lleva el largo de las intersecciones.
+        len_inter = 0
         # j es el índice de las hojas cuyo bbox interseca el de D.
-        for j in idx.intersection(D.bounds):  # pylint: disable=not-an-iterable
-            if D.intersects(inter[j]):
+        for j in idx.intersection(D['geometry'].bounds):  # pylint: disable=not-an-iterable
+            if D['geometry'].intersects(inter[j]['geometry']):
+
+                # Sumar una adyacencia.
                 n += 1
+                # Agregar el código de la hoja a la lista de adyacencias de D.
+                D['cods'].append(inter[j]['cod'])
+                # Agregar la distancia de filtración de la hoja a la lista de
+                #  distancias.
+                D['dists'].append(inter[j]['d'])
 
         # Si n == 0, hubo un problema con la filtración. Analizarlo.
         if n == 0:
@@ -259,12 +269,14 @@ def obtener_cuellos(P, hojas, eps=0.001, verb=0):
             msg = '\n'.join(textos)
             raise exceptions.FiltrationError(msg)
 
-        # Si no, si n == 1, D es medialuna, si no es cuello.
-        if n > 1:
-            # TODO: Analizar el d de las hojas que intersecan
-            cuellos.append(D)
+        # Agregar la cantidad de adyacencias al diccionario D.
+        D['n'] = n
 
-    return cuellos
+        # Agregar el índice de Miller.
+
+        # Agregar el ratio interseccion area
+
+    return diff
 
 
 # %% Main
@@ -274,6 +286,7 @@ def main():
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
     fn = wdir / 'laguito' #'saladito_muy_corto'  # 'laguito' # 'saladito_muy_corto'
     nombre = str(fn) + '.shp'
+    print(f"{nombre = }")
 
     # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
     R = helpers.gen_poly(tipo='fn', nombre=nombre)
@@ -281,7 +294,7 @@ def main():
     # helpers.plot_polygon(R)
 
     print('Calculando filtración recursiva...')
-    F = calcular_filtracion_recursiva(R, r_step=1)
+    F = calcular_filtracion_recursiva(R, r_step=100)
 
     print('Guardando shapefile de filtración...')
     D = crear_lista_de_diccionarios(F)
@@ -295,7 +308,7 @@ def main():
 
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
-    # pprint(L)
+    pprint(L)
 
     print('Guardando shapefile de hojas...')
     nombre_hojas = str(fn) + '_hojas.shp'
@@ -303,26 +316,26 @@ def main():
     # A = agrupar_filtracion(F, verb=0, eps = 0.001)
     # helpers.save_plist(A,nombre_salida)
 
-    hojas = [hoja['geometry'] for hoja in L]
+    # hojas = [hoja['geometry'] for hoja in L]
     # pprint(hojas)
     # helpers.plot_polygon(MultiPolygon(hojas))
-    print('Obteniendo cuellos...')
-    cuellos = obtener_cuellos(R, hojas)
+    print('Obteniendo diferencias...')
+    diferencias = obtener_diferencias(R, L)
 
-    print('Guardando shapefile de cuellos...')
-    nombre_cuellos = str(fn) + '_cuellos.shp'
-    helpers.shapefile_from_geom(cuellos, crs='EPSG:32721', fn=nombre_cuellos)
+    print('Guardando shapefile de diferencias...')
+    nombre_difs = str(fn) + '_difs.shp'
+    helpers.shapefile_from_data(diferencias, crs='EPSG:32721', fn=nombre_difs)
     # helpers.plot_polygon(MultiPolygon(cuellos))
 
     # Una vez que se obtienen los cuellos, las partes significativas son
     #  la intersección y la diferencia entre R y cuellos.
     print('Obteniendo partes significativas...')
-    inter, diff = helpers.get_inter_diff(R, cuellos, 0.001)
-    partes = inter + diff
+    # inter, diff = helpers.get_inter_diff(R, cuellos, 0.001)
+    # partes = inter + diff
 
     print('Guardando shapefile de descomposición...')
-    nombre_desc = str(fn) + '_desc.shp'
-    helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
+    # nombre_desc = str(fn) + '_desc.shp'
+    # helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
     # helpers.plot_polygon(MultiPolygon(partes))
 
 
