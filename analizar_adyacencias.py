@@ -9,6 +9,7 @@ from rtree import index
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
 
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
@@ -286,23 +287,28 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
 
 
 # %% Etiquetar cuellos
-def etiquetar_cuellos(diff, max_ratio=1.5, max_miller=0.5, min_d=200):
+def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
     """Etiquetar cuellos en la lista de diferencias."""
+
     for d in diff:
-
-        # Solo analizar si tiene ratio y miller chicos.
-        if d['ratio'] <= max_ratio and d['miller'] <= max_miller:
-
-            # Si tiene sólo una adyacencia ya es cuello.
-            if d['n'] == 1:
+        # Analizar por separado según cantidad de adyacencias.
+        if d['n'] == 1:
+            # Solo analizar si tiene ratio y miller chicos.
+            if d['ratio'] <= max_ratio and d['miller'] <= max_miller:
                 d['es_cuello'] = True
 
-            # Si no, analizar las diferencias de distancias
-            else:
-                distancia = max(d['dists']) - min(d['dists'])
-                # Si la diferencia de distancias es grande, es cuello.
-                if distancia >= min_d:
+        # Si no, analizar que no todas las distancias sean menores ni todas
+        #  mayores que cada umbral.
+        else:
+            umbrales = np.array(sorted(set(umbrales)))
+            distancias = np.array(d['dists'])
+
+            # Comprobar si todas las distancias se encuentran dentro de un rango
+            for umbral in umbrales:
+                if not (all(distancias < umbral) or
+                        all(distancias >= umbral)):
                     d['es_cuello'] = True
+                    break
 
     return diff
 
@@ -368,7 +374,7 @@ def main():
 
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
-    etiquetadas = etiquetar_cuellos(diferencias)
+    etiquetadas = etiquetar_cuellos(diferencias, [200, 600])
 
     print('Guardando shapefile de diferencias etiquetadas...')
     nombre_difs = str(fn) + '_difs.shp'
