@@ -261,9 +261,11 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
                 #  distancias.
                 D['dists'].append(inter[j]['d'])
 
-                # Calcular el largo de la intersección y sumarlo a len_inter.
-                lines = inter[j]['geometry'].intersection(D['geometry'])
-                len_inter += helpers.get_length(lines)
+                # Calcular la intersección y agregarla a la lista de líneas.
+                line = inter[j]['geometry'].intersection(D['geometry'])
+                D['lines'].append(line)
+                # Calcular el largo de la intersección y sumarlo al total.
+                len_inter += helpers.get_length(line)
 
         # Si n == 0, hubo un problema con la filtración. Analizarlo.
         if D['n'] == 0:
@@ -376,18 +378,31 @@ def main():
     nombre_difs = str(fn) + '_difs.shp'
     helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_difs)
 
+    # Extraer los cuellos con todas sus etiquetas
     # print("Extrayendo cuellos...")
-    cuellos = [e['geometry'] for e in etiquetadas if e['es_cuello']]
-    # helpers.plot_polygon(MultiPolygon(cuellos))
+    cuellos = [e for e in etiquetadas if e['es_cuello']]
+    pprint(cuellos)
+
+    # cuellos_geoms = [c['geometry'] for c in cuellos]
+    # helpers.plot_polygon(MultiPolygon(cuellos_geoms))
+
+    # Extraer las lineas que son intersección en cada cuello
+    lineas = lineas = [{'geometry': line, 'cods': cuello['cods']}
+                       for cuello in cuellos
+                       for line in cuello['lines']]
+
+    print('Guardando shapefile de linestrings...')
+    nombre_lineas = str(fn) + '_lineas.shp'
+    helpers.shapefile_from_data(lineas, crs='EPSG:32721', fn=nombre_lineas)
 
     # Una vez que se obtienen los cuellos, las partes significativas son
     #  la intersección y la diferencia entre R y cuellos.
-    print('Obteniendo partes significativas...')
-    partes = obtener_partes_significativas(R, cuellos)
+    # print('Obteniendo partes significativas...')
+    # partes = obtener_partes_significativas(R, cuellos)
 
-    print('Guardando shapefile de descomposición...')
-    nombre_desc = str(fn) + '_desc.shp'
-    helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
+    # print('Guardando shapefile de descomposición...')
+    # nombre_desc = str(fn) + '_desc.shp'
+    # helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
     # helpers.plot_polygon(MultiPolygon(partes))
 
 

@@ -196,6 +196,7 @@ def get_inter_diff(P, hojas, eps, quad_segs=16):
         'n': 0,  # Cuenta de adyacencias.
         'cods': [],  # Códigos de las hojas adyacentes.
         'dists': [],  # Distancias de filtracion de las hojas adyacentes.
+        'lines': [],  # Intersección (linestrings) con las hojas adyacentes.
         'miller': 0,  # Coeficiente de Miller.
         'ratio': 0,
         'es_cuello': False
