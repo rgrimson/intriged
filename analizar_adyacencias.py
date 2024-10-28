@@ -246,8 +246,6 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
     #  que puede ser un cuello o una medialuna.
     for i, D in enumerate(diff):
 
-        # n lleva la cuenta de adyacencias.
-        n = 0
         # len_inter lleva el largo de las intersecciones.
         len_inter = 0
 
@@ -256,7 +254,7 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
             if D['geometry'].intersects(inter[j]['geometry']):
 
                 # Sumar una adyacencia.
-                n += 1
+                D['n'] += 1
                 # Agregar el código de la hoja a la lista de adyacencias de D.
                 D['cods'].append(inter[j]['cod'])
                 # Agregar la distancia de filtración de la hoja a la lista de
@@ -275,8 +273,6 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
             msg = '\n'.join(textos)
             raise exceptions.FiltrationError(msg)
 
-        # Agregar la cantidad de adyacencias al diccionario D.
-        D['n'] = n
         # Calcular el area y el ratio len_inter^2 / area.
         D['ratio'] = (len_inter * len_inter) / D['geometry'].area
 
