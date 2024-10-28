@@ -266,7 +266,7 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
                 len_inter += helpers.get_length(lines)
 
         # Si n == 0, hubo un problema con la filtración. Analizarlo.
-        if n == 0:
+        if D['n'] == 0:
             textos = ['Parte de la diferencia no intersecta ninguna hoja.',
                       f'{i = }',
                       f'{D = }']
