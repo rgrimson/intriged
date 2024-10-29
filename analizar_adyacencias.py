@@ -14,7 +14,10 @@ import numpy as np
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
-from shapely import unary_union
+from shapely import (
+    unary_union,
+    line_merge,
+)
 
 from aux import helpers
 from aux import exceptions
@@ -387,7 +390,9 @@ def main():
     # helpers.plot_polygon(MultiPolygon(cuellos_geoms))
 
     # Extraer las lineas que son intersección en cada cuello
-    lineas = lineas = [{'geometry': line, 'cods': cuello['cods']}
+    lineas = lineas = [{'geometry': helpers.extender_linea(line_merge(line),
+                                                           0.001),
+                        'cods': cuello['cods']}
                        for cuello in cuellos
                        for line in cuello['lines']]
 

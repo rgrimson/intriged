@@ -298,3 +298,41 @@ def gen_poly(tipo='sintetico', nombre='pol_single_hole'):
         raise NotImplementedError(msg)
 
     return poly
+
+
+# %% Obtener vertice extendido
+def get_ext_vertex(origen, final, dist):
+    """Obtener un nuevo vértice final, extenido una distancia."""
+    # Calcular el vector dirección (dx, dy) de la línea
+    dx, dy = final[0] - origen[0], final[1] - origen[1]  # x2 - x1, y2 - y1
+
+    # Calcular la longitud de la línea actual
+    longitud_actual = math.sqrt(dx**2 + dy**2)
+
+    # Normalizar el vector dirección y multiplicarlo por la nueva longitud
+    factor = (longitud_actual + dist) / longitud_actual
+    nuevo_x_final = origen[0] + dx * factor
+    nuevo_y_final = origen[1] + dy * factor
+
+    return (nuevo_x_final, nuevo_y_final)
+
+
+# %% Extender linea
+def extender_linea(line, dist):
+    """Extender una linea, por ambos extremos, una distancia."""
+    # Función para extender una línea simple.
+    def extender_linea_simple(line, dist):
+        verts = list(line.coords)
+        # Extender el primer y último extremo
+        verts[0] = get_ext_vertex(verts[1], verts[0], dist)
+        verts[-1] = get_ext_vertex(verts[-2], verts[-1], dist)
+        return LineString(verts)
+
+    if isinstance(line, LineString):
+        return extender_linea_simple(line, dist)
+    elif isinstance(line, LineString):
+        return MultiLineString(
+            [extender_linea_simple(line, dist) for line in line.geoms]
+        )
+    else:
+        raise exceptions.NotALineStringError
