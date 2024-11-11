@@ -337,3 +337,19 @@ def extender_linea(line, dist):
         )
     else:
         raise exceptions.NotALineStringError
+
+
+# %% Extraer anillos de un polígono simple
+def extraer_anillos(polygon):
+    """Extraer los anillos de un polígono siglepart."""
+    if not isinstance(polygon, Polygon):
+        raise exceptions.NotAPolygonError
+
+    # Extraer anillos
+    anillos = []
+
+    anillos.append(LineString(polygon.exterior))
+    for interior in polygon.interiors:
+        anillos.append(LineString(interior))
+
+    return anillos

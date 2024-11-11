@@ -11,6 +11,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 
+from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
@@ -353,11 +354,33 @@ def extraer_lineas(cuellos, hojas, umbrales, eps=0.001, min_length=1.0):
     # Extender las líneas un epsilon en cada extremo y agregarles un id.
     lineas = [{'geometry': helpers.extender_linea(line['geometry'], eps),
                'id': i,
-               **line}
+               'cuello_id': line['cuello_id'],
+               'cod': line['cod'],
+               'dist': line['dist']}
                for i, line in enumerate(lineas)
                if line['geometry'].length >= min_length]
 
     return lineas
+
+
+# %% Rectificar líneas
+def rectificar_lineas(P, lineas, eps=0.001):
+    """Rectificar las líneas en sus intersecciones con P."""
+    # Obtener los puntos de intersección de cada línea con los anillos de P.
+    anillos = unary_union(helpers.extraer_anillos(P))
+    intersecciones = []
+    for linea in lineas:
+        puntos = linea['geometry'].intersection(anillos)
+        inicio, fin = puntos.geoms[0], puntos.geoms[-1]
+        rectificada = LineString([inicio, fin])
+        extendida = helpers.extender_linea(rectificada, eps)
+        intersecciones.append({'id': linea['id'],
+                               'cuello_id': linea['cuello_id'],
+                               'cod': linea['cod'],
+                               'dist': linea['dist'],
+                               'geometry': extendida})
+
+    return intersecciones
 
 
 # %% Obtener partes significativas
@@ -439,11 +462,20 @@ def main():
     helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_cuellos)
 
     # Extraer las lineas que son intersección en cada cuello
+    print('Extrayendo lineas...')
     lineas = extraer_lineas(cuellos, hojas=L, umbrales=[200, 600])
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
     helpers.shapefile_from_data(lineas, crs='EPSG:32721', fn=nombre_lineas)
+
+    # Rectificar las líneas
+    print('Rectificando lineas...')
+    rectificadas = rectificar_lineas(R, lineas)
+
+    print('Guardando shapefile de rectificadas...')
+    nombre_rectif = str(fn) + '_rectificadas.shp'
+    helpers.shapefile_from_data(rectificadas, crs='EPSG:32721', fn=nombre_rectif)
 
     # Una vez que se obtienen los cuellos, las partes significativas son
     #  la intersección y la diferencia entre R y cuellos.
