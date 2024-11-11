@@ -314,25 +314,51 @@ def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
 
 
 # %% Extraer lineas
-def extraer_lineas(cuellos, hojas, eps=0.001):
+def extraer_lineas(cuellos, hojas, umbrales, eps=0.001, min_length=1.0):
     """Extraer las lineas de intersección entre cuellos y hojas."""
+    # Quitar de cada cuello la línea, código de hoja y distancia,
+    #  de la mayor distancia (el cuello se unirá a esa hoja)
+    cuellos_filtrados = []
+    for cuello in cuellos:
+        # Si hay una sola adyacencia, mantener esa adyacencia.
+        if cuello['n'] == 1:
+            cuellos_filtrados.append(cuello)
+        else:
+            # Encontrar el índice del elemento de mayor distancia
+            max_index = cuello['dists'].index(max(cuello['dists']))
+            # Encontrar el máximo umbral por debajo de la mayor distancia
+            umbral_max = max(umb
+                             for umb in umbrales
+                             if umb < cuello['dists'][max_index])
+
+            # Mantener los elementos de distancia menor al máximo umbral
+            indices_mantener = [i
+                                for i, dist in enumerate(cuello['dists'])
+                                if dist < umbral_max]
+            cuello['cods'] = [cuello['cods'][i] for i in indices_mantener]
+            cuello['dists'] = [cuello['dists'][i] for i in indices_mantener]
+            cuello['lines'] = [cuello['lines'][i] for i in indices_mantener]
+
+            cuellos_filtrados.append(cuello)
+
     # Extraer primero cada línea de cada cuello, con los atributos de
     #  las adyacencias.
-    lineas = [{'geometry': helpers.extender_linea(line_merge(line),
-                                                           0.001),
-                        'cuello_id': cuello['id'],
-                        'cods': cuello['cods'],
-                        'dists': cuello['dists']}
-                        for cuello in cuellos
-                        for line in cuello['lines']]
+    lineas = [{'geometry': line_merge(line),
+               'cuello_id': cuello['id'],
+               'cod': cuello['cods'][i],
+               'dist': cuello['dists'][i]}
+               for cuello in cuellos_filtrados
+               for i, line in enumerate(cuello['lines'])]
 
-    # Extender las líneas un epsilon en cada extremo y agregarles un id
+    # Extender las líneas un epsilon en cada extremo y agregarles un id.
     lineas = [{'geometry': helpers.extender_linea(line['geometry'], eps),
                'id': i,
                **line}
-               for i, line in enumerate(lineas)]
+               for i, line in enumerate(lineas)
+               if line['geometry'].length >= min_length]
 
     return lineas
+
 
 # %% Obtener partes significativas
 def obtener_partes_significativas(P, cuellos, eps=0.001, quad_segs=16):
@@ -412,9 +438,8 @@ def main():
     nombre_cuellos = str(fn) + '_cuellos.shp'
     helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_cuellos)
 
-
     # Extraer las lineas que son intersección en cada cuello
-    lineas = extraer_lineas(cuellos, hojas=L)
+    lineas = extraer_lineas(cuellos, hojas=L, umbrales=[200, 600])
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
