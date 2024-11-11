@@ -193,6 +193,7 @@ def get_inter_diff(P, hojas, eps, quad_segs=16):
 
     diff = [{
         'geometry': dif,
+        'id': i,
         'n': 0,  # Cuenta de adyacencias.
         'cods': [],  # Códigos de las hojas adyacentes.
         'dists': [],  # Distancias de filtracion de las hojas adyacentes.
@@ -200,7 +201,7 @@ def get_inter_diff(P, hojas, eps, quad_segs=16):
         'miller': 0,  # Coeficiente de Miller.
         'ratio': 0,
         'es_cuello': False
-    } for dif in diferencias]
+    } for i, dif in enumerate(diferencias)]
 
     return inter, diff
 

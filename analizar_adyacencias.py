@@ -248,7 +248,6 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
     # D es un diccionario {'geometry': diff} con la geometría de la diferencia,
     #  que puede ser un cuello o una medialuna.
     for i, D in enumerate(diff):
-
         # len_inter lleva el largo de las intersecciones.
         len_inter = 0
 
@@ -313,6 +312,27 @@ def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
 
     return diff
 
+
+# %% Extraer lineas
+def extraer_lineas(cuellos, hojas, eps=0.001):
+    """Extraer las lineas de intersección entre cuellos y hojas."""
+    # Extraer primero cada línea de cada cuello, con los atributos de
+    #  las adyacencias.
+    lineas = [{'geometry': helpers.extender_linea(line_merge(line),
+                                                           0.001),
+                        'cuello_id': cuello['id'],
+                        'cods': cuello['cods'],
+                        'dists': cuello['dists']}
+                        for cuello in cuellos
+                        for line in cuello['lines']]
+
+    # Extender las líneas un epsilon en cada extremo y agregarles un id
+    lineas = [{'geometry': helpers.extender_linea(line['geometry'], eps),
+               'id': i,
+               **line}
+               for i, line in enumerate(lineas)]
+
+    return lineas
 
 # %% Obtener partes significativas
 def obtener_partes_significativas(P, cuellos, eps=0.001, quad_segs=16):
@@ -382,19 +402,19 @@ def main():
     helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_difs)
 
     # Extraer los cuellos con todas sus etiquetas
-    # print("Extrayendo cuellos...")
+    print("Extrayendo cuellos...")
     cuellos = [e for e in etiquetadas if e['es_cuello']]
-    pprint(cuellos)
 
+    # pprint(cuellos)
     # cuellos_geoms = [c['geometry'] for c in cuellos]
     # helpers.plot_polygon(MultiPolygon(cuellos_geoms))
+    print('Guardando shapefile de cuellos...')
+    nombre_cuellos = str(fn) + '_cuellos.shp'
+    helpers.shapefile_from_data(etiquetadas, crs='EPSG:32721', fn=nombre_cuellos)
+
 
     # Extraer las lineas que son intersección en cada cuello
-    lineas = lineas = [{'geometry': helpers.extender_linea(line_merge(line),
-                                                           0.001),
-                        'cods': cuello['cods']}
-                       for cuello in cuellos
-                       for line in cuello['lines']]
+    lineas = extraer_lineas(cuellos, hojas=L)
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
