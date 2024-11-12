@@ -15,6 +15,7 @@ from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
+from shapely.ops import split
 from shapely import (
     unary_union,
     line_merge,
@@ -383,6 +384,29 @@ def rectificar_lineas(P, lineas, eps=0.001):
     return intersecciones
 
 
+# %% Dividir polígono
+def dividir_poligono(P, lineas):
+    """Dividir un polígono por una lista de líneas."""
+    # Iniciar lista de subpolígonos con el polígono original.
+    subpoligonos = [{'geometry': P}]
+
+    for linea in lineas:
+        # Iniciar lista de supolígonos generados por esta línea.
+        nuevos_subpol = []
+        for subpol in subpoligonos:
+            if subpol['geometry'].intersects(linea['geometry']):
+                division = split(subpol['geometry'], linea['geometry'])
+                nuevos_subpol.extend(list(division.geoms))
+            else:
+                nuevos_subpol.append(subpol['geometry'])
+        # Una vez recorridos todos los polígonos, nuevos_subpol tiene la
+        #  división de los subpoligonos anteriores por la linea actual.
+        # Reasignar subpoligonos.
+        subpoligonos = [{'geometry': poligono} for poligono in nuevos_subpol]
+
+    return subpoligonos
+
+
 # %% Obtener partes significativas
 def obtener_partes_significativas(P, cuellos, eps=0.001, quad_segs=16):
     """Obtener las partes significativas de P.
@@ -476,6 +500,15 @@ def main():
     print('Guardando shapefile de rectificadas...')
     nombre_rectif = str(fn) + '_rectificadas.shp'
     helpers.shapefile_from_data(rectificadas, crs='EPSG:32721', fn=nombre_rectif)
+
+    # Dividir el polígono por las líneas rectificadas
+    print('Dividiendo poligonos...')
+    divididos = dividir_poligono(R, rectificadas)
+
+    print('Guardando shapefile de divididos...')
+    nombre_divididos = str(fn) + '_divididos.shp'
+    helpers.shapefile_from_data(divididos, crs='EPSG:32721', fn=nombre_divididos)
+
 
     # Una vez que se obtienen los cuellos, las partes significativas son
     #  la intersección y la diferencia entre R y cuellos.
