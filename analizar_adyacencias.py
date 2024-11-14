@@ -18,10 +18,11 @@ from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
 from shapely.geometry.collection import GeometryCollection
-from shapely.ops import split
+from shapely.ops import split, polygonize
 from shapely import (
     unary_union,
     line_merge,
+    union_all,
 )
 
 from aux import helpers
@@ -195,7 +196,7 @@ def etiquetar_distancias(distancias, k=3):
     GMM.fit(A.reshape(-1,1))
     E=GMM.predict(A.reshape(-1,1))
     P = np.vstack([A,E]).T
-    print(P)
+    # print(P)
     return 0
 
 
@@ -405,22 +406,19 @@ def rectificar_lineas(P, lineas, eps=0.001):
 # %% Dividir polígono
 def dividir_poligono(P, lineas):
     """Dividir un polígono por una lista de líneas."""
-    # Iniciar lista de subpolígonos con el polígono original.
-    subpoligonos = [{'geometry': P}]
-
-    for linea in lineas:
-        # Iniciar lista de supolígonos generados por esta línea.
-        nuevos_subpol = []
-        for subpol in subpoligonos:
-            if subpol['geometry'].intersects(linea['geometry']):
-                division = split(subpol['geometry'], linea['geometry'])
-                nuevos_subpol.extend(list(division.geoms))
-            else:
-                nuevos_subpol.append(subpol['geometry'])
-        # Una vez recorridos todos los polígonos, nuevos_subpol tiene la
-        #  división de los subpoligonos anteriores por la linea actual.
-        # Reasignar subpoligonos.
-        subpoligonos = [{'geometry': poligono} for poligono in nuevos_subpol]
+    # Implementación modificada de split.
+    # Extraer las geometrías de las líneas.
+    geoms = [linea['geometry'] for linea in lineas]
+    # Agregarle los anillos del polígono.
+    anillos = helpers.extraer_anillos(P)
+    geoms.extend(anillos)
+    # Unir en una multilinestring
+    unioned = union_all(geoms)
+    # Poligonizar y quedarse con los polígonos cuyo punto representativo
+    #  esté dentro de P.
+    subpoligonos = [{'geometry': poly}
+                    for poly in polygonize(unioned)
+                    if poly.representative_point().within(P)]
 
     return subpoligonos
 
@@ -474,9 +472,9 @@ def main():
 
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
-    pprint(L)
-    distancias = extraer_distancias(L)
-    print(f'{distancias = }')
+    # pprint(L)
+    distancias = [H['d'] for H in L]
+    # print(f'{distancias = }')
     print("Etiquetando distancias...")
     etiquetar_distancias(distancias)
 
@@ -490,7 +488,7 @@ def main():
 
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
-    etiquetadas = etiquetar_cuellos(diferencias, [80, 800])
+    etiquetadas = etiquetar_cuellos(diferencias, umbrales=UMBRALES)
 
     print('Guardando shapefile de diferencias etiquetadas...')
     nombre_difs = str(fn) + '_difs.shp'
@@ -509,7 +507,7 @@ def main():
 
     # Extraer las lineas que son intersección en cada cuello
     print('Extrayendo lineas...')
-    lineas = extraer_lineas(cuellos, hojas=L, umbrales=[80, 800])
+    lineas = extraer_lineas(cuellos, hojas=L, umbrales=UMBRALES)
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
@@ -544,4 +542,5 @@ def main():
 
 
 if __name__ == '__main__':
+    UMBRALES = [200, 600]
     main()
