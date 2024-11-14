@@ -11,6 +11,9 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+from sklearn.mixture import GaussianMixture
+
 from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
@@ -182,6 +185,21 @@ def extraer_distancias(F):
     _antirecursion(F)
 
     return distancias
+
+
+# %% Etiquetar distancias
+def etiquetar_distancias(distancias, k=3):
+    """Etiquetar las distancias en k categorías."""
+    A = np.array(distancias)
+    GMM = GaussianMixture(n_components=k, covariance_type='full', max_iter=20, random_state=0)
+    GMM.fit(A.reshape(-1,1))
+    E=GMM.predict(A.reshape(-1,1))
+    P = np.vstack([A,E]).T
+    print(P)
+    return 0
+
+
+
 
 
 # %% Crear lista de diccionarios
@@ -451,12 +469,16 @@ def main():
 
     # antirecursion(F, verb=0)
 
-    # distancias = extraer_distancias(F)
-    # print(f'{distancias = }')
+
+
 
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
-    # pprint(L)
+    pprint(L)
+    distancias = extraer_distancias(L)
+    print(f'{distancias = }')
+    print("Etiquetando distancias...")
+    etiquetar_distancias(distancias)
 
     print('Guardando shapefile de hojas...')
     nombre_hojas = str(fn) + '_hojas.shp'
@@ -468,7 +490,7 @@ def main():
 
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
-    etiquetadas = etiquetar_cuellos(diferencias, [200, 600])
+    etiquetadas = etiquetar_cuellos(diferencias, [80, 800])
 
     print('Guardando shapefile de diferencias etiquetadas...')
     nombre_difs = str(fn) + '_difs.shp'
@@ -487,7 +509,7 @@ def main():
 
     # Extraer las lineas que son intersección en cada cuello
     print('Extrayendo lineas...')
-    lineas = extraer_lineas(cuellos, hojas=L, umbrales=[200, 600])
+    lineas = extraer_lineas(cuellos, hojas=L, umbrales=[80, 800])
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
