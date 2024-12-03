@@ -200,9 +200,6 @@ def etiquetar_distancias(distancias, k=3):
     return 0
 
 
-
-
-
 # %% Crear lista de diccionarios
 def crear_lista_de_diccionarios(F):
     """Crear una lista de diccionarios con cada elemento de la filtración F."""
