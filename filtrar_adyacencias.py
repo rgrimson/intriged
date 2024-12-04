@@ -33,11 +33,10 @@ from aux import exceptions
 def calcular_filtracion_recursiva(P, cod='0', r=0, r_step=1, verb=0, eps=0.001):
     """Calcular la filtración recursiva de P.
 
-    Returns:
-        Un diccionario {'cod': cod, 'd': d, 'P': P, 'F': F}, donde F puede ser
-        None si P es indivisible y se absorbe en d, o una lista de dos o más
-        elementos, donde cada elemento es un diccionario correspondiente a cada
-        parte de la descomposición de P en d.
+    Returns: Un diccionario {'cod': cod, 'd': d, 'P': P, 'F': F}, donde F puede
+    ser None si P es indivisible y se absorbe en d, o una lista de dos o más
+    elementos, donde cada elemento es un diccionario correspondiente a cada
+    parte de la descomposición de P en d.
     """
     # Empezar limpiando los vértices de P.
     P = P.buffer(0)
@@ -169,35 +168,6 @@ def antirecursion(F, verb=0):
     _antirecursion(F, verb)
     print()
     helpers.plot_polygon(MultiPolygon(poligonos))
-
-
-# %% Extraer distancias
-def extraer_distancias(F):
-    """Extraer las distancias de una filtración."""
-    distancias = []
-
-    def _antirecursion(F):
-        """Función privada que extrae las distancias en forma recursiva."""
-        distancias.append(F['d'])
-        if F['F']:
-            for f in F['F']:
-                _antirecursion(f)
-
-    _antirecursion(F)
-
-    return distancias
-
-
-# %% Etiquetar distancias
-def etiquetar_distancias(distancias, k=3):
-    """Etiquetar las distancias en k categorías."""
-    A = np.array(distancias)
-    GMM = GaussianMixture(n_components=k, covariance_type='full', max_iter=20, random_state=0)
-    GMM.fit(A.reshape(-1,1))
-    E=GMM.predict(A.reshape(-1,1))
-    P = np.vstack([A,E]).T
-    # print(P)
-    return 0
 
 
 # %% Crear lista de diccionarios
@@ -403,6 +373,7 @@ def rectificar_lineas(P, lineas, eps=0.001):
 # %% Dividir polígono
 def dividir_poligono(P, lineas):
     """Dividir un polígono por una lista de líneas."""
+
     # Implementación modificada de split.
     # Extraer las geometrías de las líneas.
     geoms = [linea['geometry'] for linea in lineas]
@@ -420,24 +391,58 @@ def dividir_poligono(P, lineas):
     return subpoligonos
 
 
-# %% Obtener partes significativas
-def obtener_partes_significativas(P, cuellos, eps=0.001, quad_segs=16):
-    """Obtener las partes significativas de P.
+# %% Etiquetar diferencias
+def etiquetar_divididos(subpolis, r=0, r_step=1, verb=0, eps=0.001):
+    """Etiquetar los subpolígonos divididos.
 
-    `cuellos` es una lista de geometrías de cuellos.
+    Returns: Una lista de diccionarios [{`id`: id, `d`: d, `geometry`: P}, ...]
+    donde P es un subpolígono de la división y se absorbe en d.
     """
-    unidos = unary_union(cuellos)
-    buffered = unidos.buffer(eps, quad_segs=quad_segs)
+    # Iterar sobre la lista de supolígonos divididos.
+    for i, subpol in enumerate(subpolis):
+        # Agregar id
+        subpol['id'] = i
+        # Definir P
+        P = subpol['geometry']
+        # P tiene que ser un polígono singlepart, si no eleva un error.
+        if not isinstance(P, Polygon):
+            textos = ['P no es un poligono singlepart.']
+            msg = '\n'.join(textos)
+            raise exceptions.NotAPolygonError(msg)
 
-    if not buffered.is_valid:
-        raise exceptions.InvalidGeometryError
+        # P tiene que ser un polígono válido, si no eleva un error.
+        if not P.is_valid:
+            textos = ['P es invalido.']
+            msg = '\n'.join(textos)
+            raise exceptions.InvalidGeometryError(msg)
 
-    intersecciones = helpers.lpolys(P.intersection(buffered))
-    diferencias = helpers.lpolys(P.difference(buffered))
+        # P no puede ser un polígono vacío, si no eleva un error.
+        if P.is_empty:
+            textos = ['P es vacío.']
+            msg = '\n'.join(textos)
+            raise exceptions.EmptyGeometryError(msg)
 
-    partes = intersecciones + diferencias
+        # Topología de P.
+        topo_P = helpers.topo(P)
 
-    return partes
+        if verb > 0:
+            print(f'\n{i = }\n{r = }\n{topo_P = }')
+
+        # Distancia de filtración.
+        d = r + r_step
+
+        # Q es el buffer negativo de P.
+        Q = helpers.buffer_negativo(P, d, eps)
+
+        # Mientras que Q no sea un polígono vacío:
+        while not Q.is_empty:
+            d += r_step
+            Q = helpers.buffer_negativo(P, d, eps)
+
+        # Agregar d a subpol.
+        subpol['d'] = d
+
+    return subpolis
 
 
 # %% Main
@@ -462,18 +467,11 @@ def main():
     nombre_filtr = str(fn) + '_filtr.shp'
     helpers.shapefile_from_data(D, crs='EPSG:32721', fn=nombre_filtr)
 
-    # antirecursion(F, verb=0)
-
-
-
-
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
     # pprint(L)
     distancias = [H['d'] for H in L]
     # print(f'{distancias = }')
-    print("Etiquetando distancias...")
-    etiquetar_distancias(distancias)
 
     print('Guardando shapefile de hojas...')
     nombre_hojas = str(fn) + '_hojas.shp'
@@ -521,21 +519,17 @@ def main():
     # Dividir el polígono por las líneas rectificadas
     print('Dividiendo poligonos...')
     divididos = dividir_poligono(R, rectificadas)
+    divididos_etiquetados = etiquetar_divididos(divididos)
 
     print('Guardando shapefile de divididos...')
     nombre_divididos = str(fn) + '_divididos.shp'
-    helpers.shapefile_from_data(divididos, crs='EPSG:32721', fn=nombre_divididos)
+    # Etiquetar las divisiones
 
+    helpers.shapefile_from_data(divididos_etiquetados,
+                                crs='EPSG:32721',
+                                fn=nombre_divididos)
 
-    # Una vez que se obtienen los cuellos, las partes significativas son
-    #  la intersección y la diferencia entre R y cuellos.
-    # print('Obteniendo partes significativas...')
-    # partes = obtener_partes_significativas(R, cuellos)
-
-    # print('Guardando shapefile de descomposición...')
-    # nombre_desc = str(fn) + '_desc.shp'
-    # helpers.shapefile_from_geom(partes, crs='EPSG:32721', fn=nombre_desc)
-    # helpers.plot_polygon(MultiPolygon(partes))
+    return None
 
 
 if __name__ == '__main__':

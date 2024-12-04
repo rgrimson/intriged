@@ -104,6 +104,23 @@ def plot_polygon(polygon):
     plt.show()
 
 
+# %% Buffer negativo
+def buffer_negativo(P, d, quad_segs=16):
+    """Buffer negativo de un polígono en una distancia `d`."""
+    buffered = P.buffer(-d, quad_segs=quad_segs)
+    if not buffered.is_valid:
+        textos = [
+            'Buffered es invalido.',
+            f'{P = }',
+            f'{d = }',
+            f'{buffered = }',
+        ]
+        msg = '\n'.join(textos)
+        raise exceptions.InvalidGeometryError(msg)
+
+    return buffered
+
+
 # %% Reinflar
 def reinflado(P, d, eps=0.001, quad_segs=16):
     """Reinflar un polígono en una distancia `d`."""
