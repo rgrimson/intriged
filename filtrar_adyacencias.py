@@ -4,21 +4,13 @@
 
 # %% Librerías
 from pathlib import Path
-from pprint import pprint
+
 from rtree import index
-
-import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
-
-
-from sklearn.mixture import GaussianMixture
-
 from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
 from shapely.geometry.multipolygon import MultiPolygon
-from shapely.geometry.collection import GeometryCollection
-from shapely.ops import split, polygonize
+from shapely.ops import polygonize
 from shapely import (
     unary_union,
     line_merge,
@@ -136,6 +128,116 @@ def calcular_filtracion_recursiva(P, cod='0', r=0, r_step=1, verb=0, eps=0.001):
         raise exceptions.FiltrationError(msg)
 
     # Si no, LQ == [Polygon()] y sale de la recursión devolviendo el
+    #  diccionario de respuesta construído (rta['F'] == None).
+    return rta
+
+# %% Calcular Filtración Recursiva a partir de lista
+def calcular_filtracion_recursiva_a_partir_de_lista(P, cod='0', radios=[],verb=0, eps=0.001):
+    """Calcular la filtración recursiva de P.
+
+    Returns: Un diccionario {'cod': cod, 'd': d, 'P': P, 'F': F}, donde F puede
+    ser None si P es indivisible y se absorbe en d, o una lista de dos o más
+    elementos, donde cada elemento es un diccionario correspondiente a cada
+    parte de la descomposición de P en d.
+    """
+
+    if radios == []:
+        raise exceptions.FiltrationError('Radios vacios.')
+
+    #defino r y r_step
+    r = radios[0]
+    radios_pendientes = radios.copy()
+
+    # Empezar limpiando los vértices de P.
+    P = P.buffer(0)
+
+    # P tiene que ser un polígono singlepart, si no eleva un error.
+    if not isinstance(P, Polygon):
+        textos = ['P no es un poligono singlepart.',
+                  f'{cod = }',
+                  f'{r = }',
+                  f'{P = }']
+        msg = '\n'.join(textos)
+        raise exceptions.NotAPolygonError(msg)
+
+    # P tiene que ser un polígono válido, si no eleva un error.
+    if not P.is_valid:
+        textos = ['P es invalido.',
+                  f'{cod = }',
+                  f'{r = }',
+                  f'{P = }']
+        msg = '\n'.join(textos)
+        raise exceptions.InvalidGeometryError(msg)
+
+    # P no puede ser un polígono vacío, si no eleva un error.
+    if P.is_empty:
+        textos = ['P es vacío.',
+                  f'{cod = }',
+                  f'{r = }',
+                  f'{P = }']
+        msg = '\n'.join(textos)
+        raise exceptions.EmptyGeometryError(msg)
+
+    # Topología de P.
+    topo_P = helpers.topo(P)
+
+    if verb > 0:
+        print(f'\n{cod = }\n{r = }\n{topo_P = }')
+
+    # Distancia de filtración.
+    d = radios_pendientes[0]
+
+    # Q es la intersección entre P y su buffereado
+    #  (prácticamente el mismo buffereado, que debería estar contenido en P
+    #  excepto porque tiene vértices que P no tiene).
+    buffered = helpers.reinflado(P, d, eps)
+    Q = (P.intersection(buffered)).normalize()
+    topo_Q = helpers.topo(Q)
+    radios_pendientes.pop(0)
+
+    # Mientras que P y Q tengan misma cantidad de partes:
+    while len(topo_P) == len(topo_Q) and radios_pendientes:
+        d = radios_pendientes[0]
+        radios_pendientes.pop(0)
+        buffered = helpers.reinflado(P, d, eps)
+        Q = (P.intersection(buffered)).normalize()
+        topo_Q = helpers.topo(Q)
+
+    # En este momento, Q tiene más partes que P, o es un polígono vacío (si P
+    #  se absorbió sin haberse descompuesto); y d es la distancia para la que
+    #  cambió la topología de P.
+
+    # Iniciar el diccionario de respuesta.
+    rta = {
+        'cod': cod,
+        'P': P,
+        'd': d,
+        'F': None
+    }
+
+    # LQ es una lista de Polygons partes de Q o [Polygon()].
+    # Estos polígonos son los núcleos componentes de P.
+    LQ = helpers.lpolys(Q)
+
+    # Si Q tiene más de una componente Polygon, descomponer P:
+    if len(LQ) > 1:
+        # rta['F'] pasa a ser una lista con al menos dos elementos.
+        # Cada elemento es el diccionario de respuesta de la filtración de Q.
+        rta['F'] = []
+        # Por cada parte de Q:
+        for i, Q in enumerate(LQ):
+            # Calcular esta misma filtración para cada núcleo, llevando un
+            #  código que concatena índices de cada parte en forma recursiva, y
+            #  una distancia inicial que es la distancia en la que se generó
+            #  esta parte.
+            frQ = calcular_filtracion_recursiva_a_partir_de_lista(Q, cod+str(i), radios_pendientes, verb,
+                                                 eps)
+            rta['F'].append(frQ)
+
+        return rta
+
+
+    # Si no, LQ == [Polygon()] o se acabaron los radios pendientes y LQ == [P] y sale de la recursión devolviendo el
     #  diccionario de respuesta construído (rta['F'] == None).
     return rta
 
@@ -302,7 +404,7 @@ def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
 
 
 # %% Extraer lineas
-def extraer_lineas(cuellos, hojas, umbrales, eps=0.001, min_length=1.0):
+def extraer_lineas(cuellos, umbrales, eps=0.001, min_length=1.0):
     """Extraer las lineas de intersección entre cuellos y hojas."""
     # Quitar de cada cuello la línea, código de hoja y distancia,
     #  de la mayor distancia (el cuello se unirá a esa hoja)
@@ -339,7 +441,7 @@ def extraer_lineas(cuellos, hojas, umbrales, eps=0.001, min_length=1.0):
                for i, line in enumerate(cuello['lines'])]
 
     # Extender las líneas un epsilon en cada extremo y agregarles un id.
-    lineas = [{'geometry': helpers.extender_linea(line['geometry'], eps),
+    lineas = [{'geometry': helpers.extender_linea(line, eps),
                'id': i,
                'cuello_id': line['cuello_id'],
                'cod': line['cod'],
@@ -360,7 +462,7 @@ def rectificar_lineas(P, lineas, eps=0.001):
         puntos = linea['geometry'].intersection(anillos)
         inicio, fin = puntos.geoms[0], puntos.geoms[-1]
         rectificada = LineString([inicio, fin])
-        extendida = helpers.extender_linea(rectificada, eps)
+        extendida = helpers.extender_linea({'geometry': rectificada}, eps)
         intersecciones.append({'id': linea['id'],
                                'cuello_id': linea['cuello_id'],
                                'cod': linea['cod'],
@@ -372,7 +474,7 @@ def rectificar_lineas(P, lineas, eps=0.001):
 
 # %% Dividir polígono
 def dividir_poligono(P, lineas):
-    """Dividir un polígono por una lista de líneas."""
+    """Dividir un polígono por una lista de lineas."""
 
     # Implementación modificada de split.
     # Extraer las geometrías de las líneas.
@@ -386,13 +488,12 @@ def dividir_poligono(P, lineas):
     #  esté dentro de P.
     subpoligonos = [{'geometry': poly}
                     for poly in polygonize(unioned)
-                    if poly.representative_point().within(P)]
-
+                    if poly.representative_point().intersects(P)]
     return subpoligonos
 
 
-# %% Etiquetar diferencias
-def etiquetar_divididos(subpolis, r=0, r_step=1, verb=0, eps=0.001):
+# %% Etiquetar divididos
+def etiquetar_divididos(subpolis, radios, eps=0.001):
     """Etiquetar los subpolígonos divididos.
 
     Returns: Una lista de diccionarios [{`id`: id, `d`: d, `geometry`: P}, ...]
@@ -422,25 +523,67 @@ def etiquetar_divididos(subpolis, r=0, r_step=1, verb=0, eps=0.001):
             msg = '\n'.join(textos)
             raise exceptions.EmptyGeometryError(msg)
 
-        # Topología de P.
-        topo_P = helpers.topo(P)
-
-        if verb > 0:
-            print(f'\n{i = }\n{r = }\n{topo_P = }')
-
         # Distancia de filtración.
-        d = r + r_step
+        radios_pendientes = radios.copy()
+        d = radios_pendientes[0]
+        radios_pendientes.pop(0)
 
         # Q es el buffer negativo de P.
         Q = helpers.buffer_negativo(P, d, eps)
 
         # Mientras que Q no sea un polígono vacío:
-        while not Q.is_empty:
-            d += r_step
+        while radios_pendientes and not Q.is_empty:
+            d = radios_pendientes[0]
+            radios_pendientes.pop(0)
             Q = helpers.buffer_negativo(P, d, eps)
 
         # Agregar d a subpol.
         subpol['d'] = d
+
+    # Analizar adyacencias.
+    idx = index.Index()
+    for subpol in subpolis:
+        subpol['n'] = 0
+        subpol['ids_adyac'] = []
+        subpol['dists_ady'] = []
+        subpol['lines'] = []
+        idx.insert(subpol['id'], subpol['geometry'].bounds)
+
+    # Recorrer cada subpolígono S y analizar cuáles son sus adyacentes
+    for S in subpolis:
+        # len_inter lleva el largo de las intersecciones.
+        len_inter = 0
+
+        # j es el índice de llos supolígonos que intersecan a este mismo.
+        for j in idx.intersection(S['geometry'].bounds):  # pylint: disable=not-an-iterable
+            if (j != S['id'] and
+                S['geometry'].intersects(subpolis[j]['geometry'])):
+
+                # Sumar una adyacencia.
+                S['n'] += 1
+                # Agregar el id del S adyacente.
+                S['ids_adyac'].append(subpolis[j]['id'])
+                # Agregar la distancia de filtración de la hoja a la lista de
+                #  distancias.
+                S['dists_ady'].append(subpolis[j]['d'])
+
+                # Calcular el largo de la intersección y sumarlo al total.
+                line = subpolis[j]['geometry'].intersection(S['geometry'])
+                S['lines'].append(line)
+                len_inter += helpers.get_length(line)
+
+        # Si n == 0, hubo un problema con la filtración. Analizarlo.
+        if S['n'] == 0:
+            textos = ['No hay adyacencias en subpoligono dividido',
+                      f'id = {S["id"]}.']
+            msg = '\n'.join(textos)
+            raise exceptions.FiltrationError(msg)
+
+        # Calcular el area y el ratio len_inter^2 / area.
+        S['ratio'] = (len_inter * len_inter) / S['geometry'].area
+
+        # Agregar el índice de Miller.
+        S['miller'] = helpers.get_miller(S['geometry'])
 
     return subpolis
 
@@ -460,7 +603,11 @@ def main():
     # helpers.plot_polygon(R)
 
     print('Calculando filtración recursiva...')
-    F = calcular_filtracion_recursiva(R, r_step=1)
+    # Filtración usando r y r-step
+    # F = calcular_filtracion_recursiva(R, r_step=1)
+
+    # Filtración usando lista de umbrales
+    F = calcular_filtracion_recursiva_a_partir_de_lista(R, radios=UMBRALES)
 
     print('Guardando shapefile de filtración...')
     D = crear_lista_de_diccionarios(F)
@@ -470,8 +617,6 @@ def main():
     print('Creando lista de hojas...')
     L = crear_lista_de_hojas(F)
     # pprint(L)
-    distancias = [H['d'] for H in L]
-    # print(f'{distancias = }')
 
     print('Guardando shapefile de hojas...')
     nombre_hojas = str(fn) + '_hojas.shp'
@@ -502,7 +647,7 @@ def main():
 
     # Extraer las lineas que son intersección en cada cuello
     print('Extrayendo lineas...')
-    lineas = extraer_lineas(cuellos, hojas=L, umbrales=UMBRALES)
+    lineas = extraer_lineas(cuellos, umbrales=UMBRALES)
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
@@ -519,7 +664,8 @@ def main():
     # Dividir el polígono por las líneas rectificadas
     print('Dividiendo poligonos...')
     divididos = dividir_poligono(R, rectificadas)
-    divididos_etiquetados = etiquetar_divididos(divididos)
+    print('Etiquetando poligonos divididos...')
+    divididos_etiquetados = etiquetar_divididos(divididos, radios=UMBRALES)
 
     print('Guardando shapefile de divididos...')
     nombre_divididos = str(fn) + '_divididos.shp'
@@ -533,5 +679,5 @@ def main():
 
 
 if __name__ == '__main__':
-    UMBRALES = [200, 600]
+    UMBRALES = [50, 200, 400, 600, 800, 10000]  # Ojo umbral 300 falla?
     main()

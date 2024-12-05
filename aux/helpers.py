@@ -339,26 +339,30 @@ def get_ext_vertex(origen, final, dist):
 def extender_linea(line, dist):
     """Extender una linea, por ambos extremos, una distancia."""
     # Función para extender una línea simple.
-    def extender_linea_simple(line, dist):
-        verts = list(line.coords)
+    geom = line['geometry']
+    def extender_linea_simple(single_geom, dist):
+        verts = list(single_geom.coords)
         # Extender el primer y último extremo
         verts[0] = get_ext_vertex(verts[1], verts[0], dist)
         verts[-1] = get_ext_vertex(verts[-2], verts[-1], dist)
         return LineString(verts)
 
-    if isinstance(line, LineString):
-        return extender_linea_simple(line, dist)
-    elif isinstance(line, LineString):
+    if isinstance(geom, LineString):
+        return extender_linea_simple(geom, dist)
+    elif isinstance(geom, LineString):
         return MultiLineString(
-            [extender_linea_simple(line, dist) for line in line.geoms]
+            [extender_linea_simple(single, dist) for single in geom.geoms]
         )
     else:
-        raise exceptions.NotALineStringError
+        raise exceptions.NotALineStringError(f'{line = }')
 
 
 # %% Extraer anillos de un polígono simple
-def extraer_anillos(polygon):
-    """Extraer los anillos de un polígono siglepart."""
+def extraer_anillos(polygon, exploded=False):
+    """Extraer los anillos de un polígono siglepart.
+
+    Permite devolver todos los segmentos separados, usando exploded=True.
+    """
     if not isinstance(polygon, Polygon):
         raise exceptions.NotAPolygonError
 
@@ -369,4 +373,12 @@ def extraer_anillos(polygon):
     for interior in polygon.interiors:
         anillos.append(LineString(interior))
 
-    return anillos
+    if exploded:
+        segmentos = []
+        for anillo in anillos:
+            for pt1,pt2 in zip(anillo.coords, anillo.coords[1:]):
+                segmentos.append(LineString([pt1,pt2]))
+
+        return segmentos
+    else:
+        return anillos
