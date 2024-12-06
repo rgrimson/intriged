@@ -132,7 +132,7 @@ def calcular_filtracion_recursiva(P, cod='0', r=0, r_step=1, verb=0, eps=0.001):
     return rta
 
 # %% Calcular Filtración Recursiva a partir de lista
-def calcular_filtracion_recursiva_a_partir_de_lista(P, cod='0', radios=[],verb=0, eps=0.001):
+def calcular_filtracion_recursiva_a_partir_de_lista(P, cod='0', radios=None, verb=0, eps=0.001):
     """Calcular la filtración recursiva de P.
 
     Returns: Un diccionario {'cod': cod, 'd': d, 'P': P, 'F': F}, donde F puede
@@ -141,7 +141,7 @@ def calcular_filtracion_recursiva_a_partir_de_lista(P, cod='0', radios=[],verb=0
     parte de la descomposición de P en d.
     """
 
-    if radios == []:
+    if not isinstance(radios, list) or radios == []:
         raise exceptions.FiltrationError('Radios vacios.')
 
     #defino r y r_step
@@ -589,16 +589,18 @@ def etiquetar_divididos(subpolis, radios, eps=0.001):
 
 
 # %% Main
-def main():
+def main(nombre, radios, umbrales):
     """Leer un shapefile, filtrarlo y verificar los radios."""
     home_dir = Path.home()
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
-    fn = wdir / 'laguito' #'saladito_muy_corto'  # 'laguito' # 'saladito_muy_corto'
-    nombre = str(fn) + '.shp'
+    fn = wdir / nombre
+    nombre_shp = str(fn) + '.shp'
     print(f"{nombre = }")
 
-    # R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
-    R = helpers.gen_poly(tipo='fn', nombre=nombre)
+    if nombre == 'pol_single_hole' or nombre == 'pol_rafa':
+        R = helpers.gen_poly(tipo='sintetico', nombre='pol_single_hole')
+    else:
+        R = helpers.gen_poly(tipo='fn', nombre=nombre_shp)
 
     # helpers.plot_polygon(R)
 
@@ -607,7 +609,7 @@ def main():
     # F = calcular_filtracion_recursiva(R, r_step=1)
 
     # Filtración usando lista de umbrales
-    F = calcular_filtracion_recursiva_a_partir_de_lista(R, radios=UMBRALES)
+    F = calcular_filtracion_recursiva_a_partir_de_lista(R, radios=radios)
 
     print('Guardando shapefile de filtración...')
     D = crear_lista_de_diccionarios(F)
@@ -628,7 +630,7 @@ def main():
 
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
-    etiquetadas = etiquetar_cuellos(diferencias, umbrales=UMBRALES)
+    etiquetadas = etiquetar_cuellos(diferencias, umbrales=umbrales)
 
     print('Guardando shapefile de diferencias etiquetadas...')
     nombre_difs = str(fn) + '_difs.shp'
@@ -647,7 +649,7 @@ def main():
 
     # Extraer las lineas que son intersección en cada cuello
     print('Extrayendo lineas...')
-    lineas = extraer_lineas(cuellos, umbrales=UMBRALES)
+    lineas = extraer_lineas(cuellos, umbrales=umbrales)
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
@@ -665,7 +667,7 @@ def main():
     print('Dividiendo poligonos...')
     divididos = dividir_poligono(R, rectificadas)
     print('Etiquetando poligonos divididos...')
-    divididos_etiquetados = etiquetar_divididos(divididos, radios=UMBRALES)
+    divididos_etiquetados = etiquetar_divididos(divididos, radios=radios)
 
     print('Guardando shapefile de divididos...')
     nombre_divididos = str(fn) + '_divididos.shp'
@@ -679,5 +681,11 @@ def main():
 
 
 if __name__ == '__main__':
-    UMBRALES = [50, 200, 400, 600, 800, 10000]  # Ojo umbral 300 falla?
-    main()
+    # Nombre del polígono a filtrar, puede ser:
+    # 'pol_single_hole', 'pol_rafa', 'saladito_muy_corto', 'laguito', 'saladito_muy_corto'
+    NOMBRE = 'laguito'
+    # Radios de filtración
+    RADIOS = [50, 300, 400, 600, 800, 10000]
+    # Umbrales de agrupación
+    UMBRALES = RADIOS
+    main(NOMBRE, RADIOS, UMBRALES)

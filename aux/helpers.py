@@ -349,7 +349,7 @@ def extender_linea(line, dist):
 
     if isinstance(geom, LineString):
         return extender_linea_simple(geom, dist)
-    elif isinstance(geom, LineString):
+    elif isinstance(geom, MultiLineString):
         return MultiLineString(
             [extender_linea_simple(single, dist) for single in geom.geoms]
         )
