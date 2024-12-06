@@ -367,8 +367,8 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
             msg = '\n'.join(textos)
             raise exceptions.FiltrationError(msg)
 
-        # Calcular el area y el ratio len_inter^2 / area.
-        D['ratio'] = (len_inter * len_inter) / D['geometry'].area
+        # Calcular el ratio len_inter / perimetro.
+        D['ratio'] = len_inter / D['geometry'].exterior.length
 
         # Agregar el índice de Miller.
         D['miller'] = helpers.get_miller(D['geometry'])
@@ -579,8 +579,9 @@ def etiquetar_divididos(subpolis, radios, eps=0.001):
             msg = '\n'.join(textos)
             raise exceptions.FiltrationError(msg)
 
-        # Calcular el area y el ratio len_inter^2 / area.
-        S['ratio'] = (len_inter * len_inter) / S['geometry'].area
+
+        # Calcular el ratio len_inter / perimetro.
+        S['ratio'] = len_inter / S['geometry'].exterior.length
 
         # Agregar el índice de Miller.
         S['miller'] = helpers.get_miller(S['geometry'])
@@ -589,7 +590,7 @@ def etiquetar_divididos(subpolis, radios, eps=0.001):
 
 
 # %% Main
-def main(nombre, radios, umbrales):
+def main(nombre, radios, umbrales, max_ratio, max_miller):
     """Leer un shapefile, filtrarlo y verificar los radios."""
     home_dir = Path.home()
     wdir = home_dir / 'Projects/2024 - Filtracion/salado/'
@@ -630,7 +631,7 @@ def main(nombre, radios, umbrales):
 
     print('Obteniendo diferencias...')
     diferencias = obtener_diferencias(R, L)
-    etiquetadas = etiquetar_cuellos(diferencias, umbrales=umbrales)
+    etiquetadas = etiquetar_cuellos(diferencias, umbrales, max_ratio, max_miller)
 
     print('Guardando shapefile de diferencias etiquetadas...')
     nombre_difs = str(fn) + '_difs.shp'
@@ -685,7 +686,10 @@ if __name__ == '__main__':
     # 'pol_single_hole', 'pol_rafa', 'saladito_muy_corto', 'laguito', 'saladito_muy_corto'
     NOMBRE = 'laguito'
     # Radios de filtración
-    RADIOS = [50, 300, 400, 600, 800, 10000]
+    RADIOS = [50, 100, 200, 300, 400, 500, 600, 800, 10000]
     # Umbrales de agrupación
-    UMBRALES = RADIOS
-    main(NOMBRE, RADIOS, UMBRALES)
+    UMBRALES = [300, 600]
+    # Umbrales de decisión
+    MAX_RATIO = 0.1  # Ratio (largo de intersección) / (perímetro)
+    MAX_MILLER = 0.5  # Coeficiente de Miller
+    main(NOMBRE, RADIOS, UMBRALES, MAX_RATIO, MAX_MILLER)

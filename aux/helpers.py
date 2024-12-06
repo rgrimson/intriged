@@ -357,7 +357,7 @@ def extender_linea(line, dist):
         raise exceptions.NotALineStringError(f'{line = }')
 
 
-# %% Extraer anillos de un polígono simple
+# %% Extraer anillos de un polígono
 def extraer_anillos(polygon, exploded=False):
     """Extraer los anillos de un polígono siglepart.
 
