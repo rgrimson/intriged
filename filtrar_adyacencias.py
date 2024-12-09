@@ -377,7 +377,7 @@ def obtener_diferencias(P, hojas, eps=0.001, verb=0):
 
 
 # %% Etiquetar cuellos
-def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
+def etiquetar_cuellos(diff, umbrales, max_ratio, max_miller):
     """Etiquetar cuellos en la lista de diferencias."""
 
     for d in diff:
@@ -393,7 +393,8 @@ def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
             umbrales = np.array(sorted(set(umbrales)))
             distancias = np.array(d['dists'])
 
-            # Comprobar si todas las distancias se encuentran dentro de un rango
+            # Comprobar si todas las distancias se encuentran dentro de un
+            #  mismo rango, en cuyo caso no es cuello.
             for umbral in umbrales:
                 if not (all(distancias < umbral) or
                         all(distancias >= umbral)):
@@ -403,8 +404,8 @@ def etiquetar_cuellos(diff, umbrales, max_ratio=1.5, max_miller=0.5):
     return diff
 
 
-# %% Extraer lineas
-def extraer_lineas(cuellos, umbrales, eps=0.001, min_length=1.0):
+# %% Extraer lineas de cuellos
+def extraer_lineas_de_cuellos(cuellos, umbrales, eps=0.001, min_length=1.0):
     """Extraer las lineas de intersección entre cuellos y hojas."""
     # Quitar de cada cuello la línea, código de hoja y distancia,
     #  de la mayor distancia (el cuello se unirá a esa hoja)
@@ -417,9 +418,17 @@ def extraer_lineas(cuellos, umbrales, eps=0.001, min_length=1.0):
             # Encontrar el índice del elemento de mayor distancia
             max_index = cuello['dists'].index(max(cuello['dists']))
             # Encontrar el máximo umbral por debajo de la mayor distancia
-            umbral_max = max(umb
+            #  para mantener las líneas de adyacencias con distancia menor
+            #  al umbral máximo.
+            try:
+                umbral_max = max(umb
                              for umb in umbrales
-                             if umb < cuello['dists'][max_index])
+                             # Menor o igual porque puede haber un umbral
+                             #  justo en la distancia máxima.
+                             if umb <= cuello['dists'][max_index])
+            except Exception as e:
+                print(f'{cuello = }')
+                raise e
 
             # Mantener los elementos de distancia menor al máximo umbral
             indices_mantener = [i
@@ -493,7 +502,7 @@ def dividir_poligono(P, lineas):
 
 
 # %% Etiquetar divididos
-def etiquetar_divididos(subpolis, radios, eps=0.001):
+def etiquetar_divididos(subpolis, radios, max_ratio, eps=0.001):
     """Etiquetar los subpolígonos divididos.
 
     Returns: Una lista de diccionarios [{`id`: id, `d`: d, `geometry`: P}, ...]
@@ -554,7 +563,7 @@ def etiquetar_divididos(subpolis, radios, eps=0.001):
         # len_inter lleva el largo de las intersecciones.
         len_inter = 0
 
-        # j es el índice de llos supolígonos que intersecan a este mismo.
+        # j es el índice de los supolígonos que intersecan a este mismo.
         for j in idx.intersection(S['geometry'].bounds):  # pylint: disable=not-an-iterable
             if (j != S['id'] and
                 S['geometry'].intersects(subpolis[j]['geometry'])):
@@ -586,7 +595,63 @@ def etiquetar_divididos(subpolis, radios, eps=0.001):
         # Agregar el índice de Miller.
         S['miller'] = helpers.get_miller(S['geometry'])
 
+    # Decidir si un subpolígono debe ser unido a otro.
+    # Para que un polígono se una a otro debe tener un ratio alto.
+    for S in subpolis:
+        if S['ratio'] > max_ratio:
+            S['unir'] = True
+        else:
+            S['unir'] = False
+
     return subpolis
+
+
+# %% Unir subpolígonos divididos
+def unir_divididos(divididos):
+    """Unir subpolígonos divididos."""
+    # Crear dos listas, una de subpolígonos que quedan y otra de los que
+    #  se unen.
+    subpolis_quedan = []
+    subpolis_unen = []
+    for S in divididos:
+        if S['unir']:
+            subpolis_unen.append(S)
+        else:
+            # Redefinir el polígono que va a quedar.
+            queda = {}
+            queda['id'] = S['id']
+            queda['geometry'] = S['geometry']
+            queda['d'] = S['d']
+            queda['unidos'] = []
+            subpolis_quedan.append(queda)
+
+    # Unir subpolígonos.
+    for se_une in subpolis_unen:
+        # Unirse al adyacente de mayor distancia.
+        max_index = se_une['dists_ady'].index(max(se_une['dists_ady']))
+        id_adyac = se_une['ids_adyac'][max_index]
+
+        # Para redefinir el polígono que va a quedar, extraigo su índice de la
+        #  lista de subpolígonos que quedan.
+        i_lista = [i for i, s
+                    in enumerate(subpolis_quedan)
+                    if s['id'] == id_adyac]
+
+        if len(i_lista) != 1:
+            texts = ['No se encontro el subpoligono a unir.',
+                     f'id_adyac = {id}.']
+            msg = '\n'.join(texts)
+            raise exceptions.FiltrationError(msg)
+        else:
+            i = i_lista[0]
+
+        # Unir a la geometría del polígono que queda y anotar la union.
+        subpolis_quedan[i]['geometry'] = (subpolis_quedan[i]['geometry']
+                                            .union(se_une['geometry'])
+        )
+        subpolis_quedan[i]['unidos'].append(se_une['id'])
+
+    return subpolis_quedan
 
 
 # %% Main
@@ -650,7 +715,7 @@ def main(nombre, radios, umbrales, max_ratio, max_miller):
 
     # Extraer las lineas que son intersección en cada cuello
     print('Extrayendo lineas...')
-    lineas = extraer_lineas(cuellos, umbrales=umbrales)
+    lineas = extraer_lineas_de_cuellos(cuellos, umbrales=umbrales)
 
     print('Guardando shapefile de linestrings...')
     nombre_lineas = str(fn) + '_lineas.shp'
@@ -668,28 +733,38 @@ def main(nombre, radios, umbrales, max_ratio, max_miller):
     print('Dividiendo poligonos...')
     divididos = dividir_poligono(R, rectificadas)
     print('Etiquetando poligonos divididos...')
-    divididos_etiquetados = etiquetar_divididos(divididos, radios=radios)
+    divididos_etiquetados = etiquetar_divididos(divididos,
+                                                radios=radios,
+                                                max_ratio=max_ratio)
 
     print('Guardando shapefile de divididos...')
     nombre_divididos = str(fn) + '_divididos.shp'
-    # Etiquetar las divisiones
-
     helpers.shapefile_from_data(divididos_etiquetados,
                                 crs='EPSG:32721',
                                 fn=nombre_divididos)
 
+    # Unir divididos
+    print('Uniendo subpolígonos divididos...')
+    unidos = unir_divididos(divididos_etiquetados)
+
+    print('Guardando shapefile de unidos...')
+    nombre_unidos = str(fn) + '_unidos.shp'
+    helpers.shapefile_from_data(unidos,
+                                crs='EPSG:32721',
+                                fn=nombre_unidos)
+
     return None
 
-
+# %% Constantes
 if __name__ == '__main__':
     # Nombre del polígono a filtrar, puede ser:
     # 'pol_single_hole', 'pol_rafa', 'saladito_muy_corto', 'laguito', 'saladito_muy_corto'
     NOMBRE = 'laguito'
     # Radios de filtración
-    RADIOS = [50, 100, 200, 300, 400, 500, 600, 800, 10000]
+    RADIOS = list(range(20, 1000, 20))
     # Umbrales de agrupación
-    UMBRALES = [300, 600]
+    UMBRALES = [100, 200, 400, 600]
     # Umbrales de decisión
-    MAX_RATIO = 0.1  # Ratio (largo de intersección) / (perímetro)
-    MAX_MILLER = 0.5  # Coeficiente de Miller
+    MAX_RATIO = 0.3  # Ratio (largo de intersección) / (perímetro)
+    MAX_MILLER = 0.6  # Coeficiente de Miller
     main(NOMBRE, RADIOS, UMBRALES, MAX_RATIO, MAX_MILLER)
